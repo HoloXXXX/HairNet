@@ -22,7 +22,7 @@ from . import_properties import  *
 
 from pathlib import Path
 
-versionString = "0.6.7"
+versionString = "0.7.0"
 
 
 class UnionFindList: # a combination of unionfind and singlelinkedlist
