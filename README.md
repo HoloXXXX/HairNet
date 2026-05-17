@@ -1,9 +1,5 @@
 # Attention:
-HairNet now works in Blender 2.80. 
-
-The buttons for the interface have moved to the Numeric Panel in the 3DView (N-key)
-
-HairNet for 2.79 still works.
+HairNet now works in Blender 5. 
 
 # HairNet
 HairNet addon for Blender
