@@ -22,24 +22,8 @@ from . import_properties import  *
 
 from pathlib import Path
 
-versionString = "0.6.5"
+versionString = "0.6.7"
 
-#Start Debug
-
-hnDebFile = os.path.join(os.path.dirname(__file__), 'hairNetDeb.txt')
-if Path(hnDebFile).is_file():
-    print("HN Debug File Exists")
-    import sys
-    pydev_path = '/Users/rhett/.p2/pool/plugins/org.python.pydev.core_7.7.0.202008021154/pysrc'
-    if sys.path.count(pydev_path) < 1: sys.path.append(pydev_path) 
-    
-    import pydevd
-    
-    pydevd.settrace(stdoutToServer=True, stderrToServer=True, suspend=False)
-else:
-    print("HN Debug File Doesn't exist")
-    
-#End Debug
 
 class UnionFindList: # a combination of unionfind and singlelinkedlist
     def __init__(self, n):
@@ -384,8 +368,9 @@ def restoreSelection(storedActive, storedSelected):
         sel.select = True
 
 def removeParticleSystem(object, particleSystem):
-    override = {"object": object, "particle_system": particleSystem}
-    bpy.ops.object.particle_system_remove(override)
+    #Get active_index of desired particle system
+    bpy.context.object.particle_systems.active_index = bpy.context.object.particle_systems.find(particleSystem.name)
+    bpy.ops.object.particle_system_remove()
 
 
 def sortEdges(edgesList):
@@ -550,8 +535,6 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                 targetObject = thisHairObj
                 
             #targetObject = targetObject.evaluated_get(depsgraph)
-
-            #targetObject = targetObject.evaluated_get(depsgraph)
             
             config=thisHairObj.hn_cfg
             
@@ -569,8 +552,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                     '''TS Delete settings, copy, and out'''
                     #Store a link to the system settings so we can delete the settings
                     delSet = targetObject.particle_systems[sysName].settings
-                    #Get active_index of desired particle system
-                    bpy.context.object.particle_systems.active_index = bpy.context.object.particle_systems.find(sysName)
+                    
                     #Delete Particle System
                     removeParticleSystem(targetObject, targetObject.particle_systems[sysName])
                     #Delete Particle System Settings
@@ -741,7 +723,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
 
             # Children
             pset.child_type = 'SIMPLE'
-            pset.child_nbr = 6
+            pset.child_percent = 10
             pset.rendered_child_count = 50
             pset.child_length = 1.0
             pset.child_length_threshold = 0.0
@@ -768,7 +750,9 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         bpy.ops.particle.particle_edit_toggle()
 
         #bpy.context.scene.tool_settings.particle_edit.tool = 'COMB'
-        bpy.ops.particle.brush_edit(stroke=[{'name': '', 'location': (0, 0, 0), 'mouse': (0, 0), 'mouse_event':(0, 0), 'pressure': 0, 'size': 0, 'pen_flip': False,  "x_tilt":0, "y_tilt":0, 'time': 0, 'is_start': False}])
+#        bpy.ops.particle.brush_edit(stroke=[{'name': '', 'location': (0, 0, 0), 'mouse': (0, 0), 'mouse_event':(0, 0), 'pressure': 0, 'size': 0, 'pen_flip': False,  "x_tilt":0, "y_tilt":0, 'time': 0, 'is_start': False}])
+        bpy.ops.particle.brush_edit(stroke=[{"name":"", "location":(0, 0, 0), "mouse":(0, 0), "mouse_event":(0, 0), "pressure":0, "size":0, "x_tilt":0, "y_tilt":0, "time":0, "is_start":False}], pen_flip=False)
+
         bpy.ops.particle.particle_edit_toggle()
         bpy.context.scene.tool_settings.particle_edit.use_emitter_deflect = False
         bpy.context.scene.tool_settings.particle_edit.use_preserve_root = False
