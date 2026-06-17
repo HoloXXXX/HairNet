@@ -32,13 +32,14 @@ if "bpy" in locals():
     import importlib
     importlib.reload(hairNet)
     importlib.reload(ui)
-    print("Add-on successfully reloaded!")
+    importlib.reload(unionFindList)
+    print("Hair Net successfully reloaded!")
 else:
+    import bpy
     from . import (
         hairNet,
         ui,
     )
-    import bpy
 
 
 # ### REGISTER ###

@@ -1,5 +1,4 @@
 0.7.1
-Updated user information, added a blender manifest file, removed the particle properties UI, and split the 3d view ui into a separate file.
 
 0.7.0
 Updated to work with Blender 5 API

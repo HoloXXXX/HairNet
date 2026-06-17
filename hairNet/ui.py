@@ -1,3 +1,5 @@
+# This class handles the creation of the 3d viewport side panel
+
 import bpy
 
 from . import hairNet
@@ -34,57 +36,30 @@ class HAIRNET_PT_view_panel(bpy.types.Panel):
         
 
     def drawDetails(self, layout, context):
-        self.headObj = context.object
+        self.hairSource = context.object
+        print(self.hairSource)
 
 
         #Get a list of hair objects
-        self.hairObjList = context.selected_objects
-        if self.headObj in self.hairObjList:
-            self.hairObjList.remove(self.headObj)
+        self.proxyHairObjects = context.selected_objects
+        if self.hairSource in self.proxyHairObjects:
+            self.proxyHairObjects.remove(self.hairSource)
 
         layout = self.layout
 
         row = layout.row()
-        #row.label(text = "Objects Start here")
 
-        '''Is this a hair object?'''
-
-        row = layout.row()
-        try:
-            row.prop(self.headObj.hn_cfg, 'isEmitter', text = "Emit Hair on Self")
-        except:
-            pass
-
-        #Draw this if this is a head object
-        if not self.headObj.hn_cfg.isEmitter:
-            box = layout.box()
+        box = layout.box()
+        row = box.row()
+        row.label(text = "Hair Object:")
+        row.label(text = "Use Settings:")
+        for thisHairObject in self.proxyHairObjects:
+            config=thisHairObject.hn_cfg
             row = box.row()
-            row.label(text = "Hair Object:")
-            row.label(text = "Use Settings:")
-            for thisHairObject in self.hairObjList:
-                config=thisHairObject.hn_cfg
-                row = box.row()
-                row.prop_search(config, 'masterHairSystem',  bpy.data, "particles", text = thisHairObject.name)
-                row = box.row()
-                row.label(text = "Add Guides:")
-                row.prop(config, 'sproutHairs', text = "SubD")
-#                 row.prop(thisHairObject, 'hnSubdivideHairSections', text = "Subdivide V")
-
-        #Draw this if it's a self-emitter object
-        else:
-            box = layout.box()
-            try:
-                row = box.row()
-                row.label(text = "Use Settings")
-                
-                row = box.row()
-                row.prop_search(self.headObj.hn_cfg, 'masterHairSystem',  bpy.data, "particles", text = self.headObj.name)
-
-            except:
-                pass
+            row.prop_search(config, 'masterHairSystem',  bpy.data, "particles", text = thisHairObject.name)
             row = box.row()
-            row.label(text = "Guide Subdivisions:")
-            row.prop(self.headObj.hn_cfg, 'sproutHairs', text = "SubD")
+            row.label(text = "Add Guides:")
+            row.prop(config, 'sproutHairs', text = "SubD")
 
 def register():
     bpy.utils.register_class(HAIRNET_PT_view_panel)

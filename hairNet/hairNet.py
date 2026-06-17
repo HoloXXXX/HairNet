@@ -15,6 +15,7 @@ import mathutils
 from mathutils import Vector
 from bpy.types import PropertyGroup
 from pathlib import Path
+from . import unionFindList
 
 from bpy.props import (StringProperty,
                        BoolProperty,
@@ -26,78 +27,6 @@ from bpy.props import (StringProperty,
                        CollectionProperty,
                        )
 
-
-
-
-class UnionFindList: # a combination of unionfind and singlelinkedlist
-    def __init__(self, n):
-        self.parent = [ i for i in range(n) ]
-        self.next = [ -1 for _ in range(n) ]
-        self.rank = [ 1 for _ in range(n) ]
-    def findRoots(self):
-        return [ i for i, v in enumerate(self.parent) if i == v and self.rank[i] != 1 ] # ignore single point
-    def findRoot(self, x):
-        if self.parent[x] == x:
-            return x
-        self.parent[x] = self.findRoot(self.parent[x])
-        return self.parent[x]
-    def getNext(self, x): # return -1 if no next
-        return self.next[x]
-    def getChainLength(self, x): # x must be the root
-        return self.rank[x]
-    def getChain(self, x):
-        ret = []
-        x_next = x
-        while x_next != -1:
-            ret.append(x_next)
-            x_next = self.next[x_next]
-        return ret
-    def reverseChain(self, x_root, x): # x_root is the head of list, x is the end of list
-        if self.rank[x_root] == 1: return
-        x_pre = -1
-        x_cur = x_root
-        while x_cur != -1:
-            x_next = self.next[x_cur]
-            self.next[x_cur] = x_pre
-            self.parent[x_cur] = x # parent of all nodes should be x after reversing
-            x_pre = x_cur
-            x_cur = x_next
-        self.rank[x] = self.rank[x_root]
-    def union(self, x, y):
-        x_root = self.findRoot(x)
-        y_root = self.findRoot(y)
-        if x_root == y_root: # already connected
-            return
-            
-        if y_root != y and x_root != x: 
-            # Case 1: two root points are independent, should reverse one of chains, choose shorter chain to reverse
-            # and transform this situation to Case 2
-            if self.rank[x_root] <= self.rank[y_root]:
-                self.reverseChain(x_root, x)
-                x_root = x
-            else:
-                self.reverseChain(y_root, y)
-                y_root = y
-                
-        if y_root == y: # Case 2: one of two points is dependent or all two points are dependent
-            if self.next[x] != -1:
-                self.parent[x] = y
-                self.next[y] = x
-                self.rank[y] = self.rank[y] + self.rank[x] # y become new root
-            else:
-                self.parent[y] = x_root
-                self.next[x] = y
-                self.rank[x_root] = self.rank[x_root] + self.rank[y]
-        elif x_root == x:
-            if self.next[y] != -1:
-                self.parent[y] = x 
-                self.next[x] = y 
-                self.rank[x] = self.rank[x] + self.rank[y] # x become new root
-            else:
-                self.parent[x] = y_root
-                self.next[y] = x
-                self.rank[y_root] = self.rank[y_root] + self.rank[x]
-
 # It is always good to use wrapper prop when attacking to common data block such as Object to reduce blend junk
 class HairNetConfig(PropertyGroup):
     masterHairSystem: StringProperty(
@@ -108,11 +37,6 @@ class HairNetConfig(PropertyGroup):
     isHairProxy: BoolProperty(
             name="hnIsHairProxy",
             description="Is this object a hair proxy object?",
-            default=False)
-
-    isEmitter: BoolProperty(
-            name="hnIsEmitter",
-            description="Is this object a hair emitter object?",
             default=False)
 
     sproutHairs: IntProperty(
@@ -499,8 +423,8 @@ class HAIRNET_OT_operator (bpy.types.Operator):
     meshKind : EnumProperty(items=mesh_kinds, name="Generator kind", default="FIBER")
     
     targetHead = False
-    headObj = 0
-    hairObjList = []
+    hairSource = 0
+    proxyHairObjects = []
     hairProxyList = []
     
     @classmethod
@@ -514,9 +438,9 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                     #2 = No seams in hair object
                     #3 = Bevel on curve object
 
-        targetObject = self.headObj
+        targetObject = self.hairSource
 
-        for thisHairObj in self.hairObjList:
+        for thisHairObj in self.proxyHairObjects:
             options = [
                        0,                   #0 the hair system's previous settings
                        thisHairObj,         #1 The hair object
@@ -657,19 +581,19 @@ class HAIRNET_OT_operator (bpy.types.Operator):
 
     def invoke (self, context, event):
 
-        self.headObj = bpy.context.object
+        self.hairSource = bpy.context.object
 
         #Get a list of hair objects
-        self.hairObjList = []
+        self.proxyHairObjects = []
         for obj in bpy.context.selected_objects:
-            if obj != self.headObj or obj.hn_cfg.isEmitter:
-                self.hairObjList.append(obj)
+            if obj != self.hairSource or obj.hn_cfg.isEmitter:
+                self.proxyHairObjects.append(obj)
 
 
         #if the last object selected is not flagged as a self-emitter, then assume we are creating hair on a head
         #Otherwise, each proxy will grow its own hair
 
-        if not self.headObj.hn_cfg.isEmitter:
+        if not self.hairSource.hn_cfg.isEmitter:
             self.targetHead=True
             if len(bpy.context.selected_objects) < 2:
                 self.report(type = {'ERROR'}, message = "Selection too small. Please select two objects")
@@ -813,7 +737,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         time_start = time.time()
 
         me = hairObj.data
-        uf = UnionFindList(len(me.vertices))
+        uf = unionFindList.UnionFindList(len(me.vertices))
         for ed in me.edges:
             # the edge wouldn't exist if one of points is hidden
             if me.vertices[ed.key[0]].hide == True or me.vertices[ed.key[1]].hide == True: continue
