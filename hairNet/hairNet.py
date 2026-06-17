@@ -11,18 +11,22 @@
 
 import bpy
 import mathutils
-import os
-import traceback
-
 
 from mathutils import Vector
-from bpy.props import *
-
-from . import_properties import  *
-
+from bpy.types import PropertyGroup
 from pathlib import Path
 
-versionString = "0.7.0"
+from bpy.props import (StringProperty,
+                       BoolProperty,
+                       IntProperty,
+                       FloatProperty,
+                       FloatVectorProperty,
+                       EnumProperty,
+                       PointerProperty,
+                       CollectionProperty,
+                       )
+
+
 
 
 class UnionFindList: # a combination of unionfind and singlelinkedlist
@@ -908,171 +912,19 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                 debPrintHairGuides(newHairs)
             guides = newHairs
 
-        return guides
+        return guides  
 
-class HAIRNET_PT_panel(bpy.types.Panel):
-    bl_idname = "HAIRNET_PT_HairNet"
-    bl_space_type = "PROPERTIES"
-    bl_region_type = "WINDOW"
-    bl_context = "particle"
-    bl_label = "HairNet " + versionString
-    
-
-
-    def draw(self, context):
-
-        self.headObj = context.object
-
-        #Get a list of hair objects
-        self.hairObjList = context.selected_objects
-        if self.headObj in self.hairObjList:
-            self.hairObjList.remove(self.headObj)
-
-        layout = self.layout
-
-        row = layout.row()
-        row.label(text = "Objects Start here")
-
-        #Is this a hair object?
-
-        row = layout.row()
-        try:
-            row.prop(self.headObj.hn_cfg, 'isEmitter', text = "Emit Hair on Self")
-        except:
-            pass
-
-        #Draw this if this is a head object
-        if not self.headObj.hn_cfg.isEmitter:
-            box = layout.box()
-            row = box.row()
-            row.label(text = "Hair Object:")
-            row.label(text = "Master Hair System:")
-            for thisHairObject in self.hairObjList:
-                row = box.row()
-                row.prop_search(thisHairObject.hn_cfg, 'masterHairSystem',  bpy.data, "particles", text = thisHairObject.name)
-                row = box.row()
-                row.label(text = "Guide Subdivisions:")
-                row.prop(thisHairObject.hn_cfg, 'sproutHairs', text = "Subdivide U")
-#                 row.prop(thisHairObject, 'hnSubdivideHairSections', text = "Subdivide V")
-
-        #Draw this if it's a self-emitter object
-        else:
-            box = layout.box()
-            try:
-                row = box.row()
-                row.label(text = "Master Hair System")
-                row = box.row()
-                row.prop_search(self.headObj.hn_cfg, 'masterHairSystem',  bpy.data, "particles", text = self.headObj.name)
-
-            except:
-                pass
-            row = box.row()
-            row.label(text = "Guide Subdivisions:")
-            row.prop(self.headObj.hn_cfg, 'sproutHairs', text = "Subdivide U")
-
-
-class HAIRNET_PT_view_panel(bpy.types.Panel):
-    bl_label = "HairNet"
-    bl_idname = "HAIRNET_PT_view_panel"
-    bl_space_type = "VIEW_3D"
-    bl_region_type = "UI"
-    bl_category = "Hair"
-    bl_context = "objectmode"
-    bl_options = {"DEFAULT_CLOSED"}
-    
-    
-    def draw(self, context):
-        object = context.active_object
-        if object is not None:
-            self.drawButtons(self.layout)
-            self.drawDetails(self.layout, context)
-    
-    def drawButtons(self, layout):
-        col = layout.box().column(align = True)
-        
-        row = col.row(align = True)
-        row.label(text="Make Hair")
-        
-        row = col.row()
-        row.label(text ="Add Hair From:")
-        
-        row = col.row(align = True)
-        for kind in mesh_kinds:
-            row = col.row(align = True)
-            row.operator("hairnet.operator", text=kind[1]).meshKind=kind[0]
-        
-
-    def drawDetails(self, layout, context):
-        self.headObj = context.object
-
-
-        #Get a list of hair objects
-        self.hairObjList = context.selected_objects
-        if self.headObj in self.hairObjList:
-            self.hairObjList.remove(self.headObj)
-
-        layout = self.layout
-
-        row = layout.row()
-        #row.label(text = "Objects Start here")
-
-        '''Is this a hair object?'''
-
-        row = layout.row()
-        try:
-            row.prop(self.headObj.hn_cfg, 'isEmitter', text = "Emit Hair on Self")
-        except:
-            pass
-
-        #Draw this if this is a head object
-        if not self.headObj.hn_cfg.isEmitter:
-            box = layout.box()
-            row = box.row()
-            row.label(text = "Hair Object:")
-            row.label(text = "Use Settings:")
-            for thisHairObject in self.hairObjList:
-                config=thisHairObject.hn_cfg
-                row = box.row()
-                row.prop_search(config, 'masterHairSystem',  bpy.data, "particles", text = thisHairObject.name)
-                row = box.row()
-                row.label(text = "Add Guides:")
-                row.prop(config, 'sproutHairs', text = "SubD")
-#                 row.prop(thisHairObject, 'hnSubdivideHairSections', text = "Subdivide V")
-
-        #Draw this if it's a self-emitter object
-        else:
-            box = layout.box()
-            try:
-                row = box.row()
-                row.label(text = "Use Settings")
-                
-                row = box.row()
-                row.prop_search(self.headObj.hn_cfg, 'masterHairSystem',  bpy.data, "particles", text = self.headObj.name)
-
-            except:
-                pass
-            row = box.row()
-            row.label(text = "Guide Subdivisions:")
-            row.prop(self.headObj.hn_cfg, 'sproutHairs', text = "SubD")
-
-
-
-classes = (
-    HAIRNET_OT_operator, 
-    HAIRNET_PT_panel, 
-    HAIRNET_PT_view_panel,
-    HairNetConfig,
-)
+# classes = (
+#     HAIRNET_OT_operator,
+#     HairNetConfig,
+# )
 
 def register():
-    for cls in classes:
-        bpy.utils.register_class(cls)
+    bpy.utils.register_class(HAIRNET_OT_operator)
+    bpy.utils.register_class(HairNetConfig)
     
     bpy.types.Object.hn_cfg=PointerProperty(type=HairNetConfig)
 
 def unregister():
-    for cls in reversed(classes):
-        bpy.utils.unregister_class(cls)
-
-if __name__ == '__main__':
-    register()
+    bpy.utils.unregister_class(HAIRNET_OT_operator)
+    bpy.utils.unregister_class(HairNetConfig)

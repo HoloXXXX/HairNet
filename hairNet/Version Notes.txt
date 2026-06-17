@@ -1,3 +1,9 @@
+0.7.1
+Updated user information, added a blender manifest file, removed the particle properties UI, and split the 3d view ui into a separate file.
+
+0.7.0
+Updated to work with Blender 5 API
+
 0.6.1
 updated object selection call
 
@@ -7,7 +13,7 @@ Moved interface to 3D_View to fix polling problem while switching to particle ed
 uses depsgraph to restore editing particle coordinates
 
 0.4.6
-Fixed an issue which cause hairs to jump out of place when a second or thirdÉ hair system is created. The solution was to remove the commands to connect and disconnect the hair system(s).
+Fixed an issue which cause hairs to jump out of place when a second or thirdï¿½ hair system is created. The solution was to remove the commands to connect and disconnect the hair system(s).
 Changed the behavior of Execute() to pass an existing hair system's name to createHair() so that users don't need to manually select the proper particle system.
 
 0.4.7

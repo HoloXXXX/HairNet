@@ -1,0 +1,23 @@
+schema_version = "1.0.0"
+
+id = "hairNet"
+version = "0.7.0"
+name = "Hair Net"
+tagline = "Converts mesh and curves into hair guides for the particle hair system"
+maintainer = "Holo" # previously Rhett Jackson
+type = "add-on"
+tags = ["Physics", "Pipeline"]
+
+blender_version_min = "4.2.0"
+# for earlier versions: https://github.com/Jandals/HairNet
+
+# Updated docs: 
+
+blender_version_min = "4.2.0"
+
+website = "https://github.com/HoloXXXX/HairNet"
+
+# https://docs.blender.org/manual/en/dev/advanced/extensions/licenses.html
+license = [
+  "SPDX:GPL-3.0-or-later",
+]
