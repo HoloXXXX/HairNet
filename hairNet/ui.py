@@ -2,64 +2,79 @@
 
 import bpy
 
-from . import hairNet
+from . import hair_net
 
-versionString = "0.7.1"
 
 class HAIRNET_PT_view_panel(bpy.types.Panel):
-    bl_label = "Hair Net"
-    bl_idname = "HAIRNET_PT_view_panel"
-    bl_space_type = "VIEW_3D"
-    bl_region_type = "UI"
-    bl_category = "Hair Net"
-    bl_context = "objectmode"
+    '''Handles the display of the hair net panel in the 3d viewport'''
+    bl_label = 'Hair Net'
+    bl_idname = 'HAIRNET_PT_view_panel'
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = 'Hair Net'
+    bl_context = 'objectmode'
+    hair_source = None
+    proxy_hair_guides = None
+    scene = None
+
+    def update_selected_hair(self, context):
+        '''Splits the current selection into a list of hair objects to be turned into particle hair, and the object that will host the particle system'''
+        self.scene = context.scene
+        
+        self.hair_source = context.active_object
+        
+        self.proxy_hair_guides = [ obj for obj in context.selected_objects if obj is not self.hair_source]
 
     def draw(self, context):
-        object = context.active_object
-        if object is not None:
-            self.drawButtons(self.layout)
-            self.drawDetails(self.layout, context)
+        self.update_selected_hair(context)
+
+        self.draw_core(self.layout)
     
-    def drawButtons(self, layout):
-        col = layout.box().column(align = True)
-        
-        row = col.row(align = True)
-        row.label(text="Make Hair")
-        
-        row = col.row()
-        row.label(text ="Add Hair From:")
-        
-        row = col.row(align = True)
-        for kind in hairNet.mesh_kinds:
-            row = col.row(align = True)
-            row.operator("hairnet.operator", text=kind[1]).meshKind=kind[0]
-        
+    def draw_core(self, layout):
+        layout = self.layout 
 
-    def drawDetails(self, layout, context):
-        self.hairSource = context.object
-        print(self.hairSource)
-
-
-        #Get a list of hair objects
-        self.proxyHairObjects = context.selected_objects
-        if self.hairSource in self.proxyHairObjects:
-            self.proxyHairObjects.remove(self.hairSource)
-
-        layout = self.layout
-
-        row = layout.row()
-
-        box = layout.box()
+        # HAIR SOURCE LABEL DISPLAY
+        box = layout.box()        
         row = box.row()
-        row.label(text = "Hair Object:")
-        row.label(text = "Use Settings:")
-        for thisHairObject in self.proxyHairObjects:
-            config=thisHairObject.hn_cfg
-            row = box.row()
-            row.prop_search(config, 'masterHairSystem',  bpy.data, "particles", text = thisHairObject.name)
-            row = box.row()
-            row.label(text = "Add Guides:")
-            row.prop(config, 'sproutHairs', text = "SubD")
+        row.label(text='Hair Source:')
+        if self.hair_source is not None:
+            row.label(text=self.hair_source.name)
+
+        # HAIR PARTICLE SYSTEM   
+        row = box.row()
+        row.prop_search(self.scene.hn_props, 'hair_system',  bpy.data, 'particles')
+
+        # ADD GUIDES PROPERTY
+        row = box.row()
+        row.label(text = 'Add Guides:')
+        row.prop(self.scene.hn_props, 'additional_guides', text = 'SubD')
+
+        # CONVERT TO PARTICLES BUTTON
+        row = layout.row()
+        row.scale_y = 2.0
+        row.operator('hairnet.operator', text='Convert to Hair Particles')
+
+        # HAIR OBJECT LIST
+        split = layout.split()
+
+        col = box.column()
+        col = split.column()
+        col.label(text = 'Guide Hairs:')
+
+        col = split.column()
+        for proxy_hair in self.proxy_hair_guides:
+            col.label(text = proxy_hair.name)
+
+        # VERSION
+        vbox = layout.box()
+        row = vbox.row()
+        row.label(text= hair_net.version, icon='PARTICLE_PATH')
+        sub = row.row()
+        sub.scale_x = .5
+        sub.prop(self.scene.hn_props, 'info', text = '', icon='QUESTION')
+
+
+
 
 def register():
     bpy.utils.register_class(HAIRNET_PT_view_panel)

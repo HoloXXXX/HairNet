@@ -18,26 +18,29 @@
 
 #TODO: UPDATE LINK TO DOCS IN MANIFEST (and create them)
 
+from . import hair_net
+
+
+
 bl_info = {
-        "name":"hairNet",
-        "author": "Holo, Rhett Jackson",
-        "version": (0,7,1),
-        "blender": (5,0,0),
-        "location": "3dView",
-        "category": "Particle",
-        "description": "Converts mesh and curves into hair guides for the particle hair system",
+        'name':'Hair Net',
+        'author': 'Holo, Rhett Jackson',
+        'version': (0,7,1),
+        'blender': (5,0,0),
+        'location': '3dView',
+        'category': 'Particle',
+        'description': 'Converts mesh and curves into hair guides for the particle hair system',
         }
 
-if "bpy" in locals():
+if 'bpy' in locals():
     import importlib
-    importlib.reload(hairNet)
+    importlib.reload(hair_net)
     importlib.reload(ui)
-    importlib.reload(unionFindList)
-    print("Hair Net successfully reloaded!")
+    print('Hair Net successfully reloaded!')
 else:
     import bpy
     from . import (
-        hairNet,
+        hair_net,
         ui,
     )
 
@@ -45,13 +48,13 @@ else:
 # ### REGISTER ###
 
 def register():
-    hairNet.register()
+    hair_net.register()
     ui.register()
 
 
 def unregister():
-    hairNet.unregister()
+    hair_net.unregister()
     ui.unregister()
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     register()

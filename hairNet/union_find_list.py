@@ -1,7 +1,5 @@
 # This class stores the logic for searching through a chain
 
-import bpy
-
 class UnionFindList: # a combination of unionfind and singlelinkedlist
     def __init__(self, n):
         self.parent = [ i for i in range(n) ]

@@ -11,7 +11,7 @@ Blenderartists Thread:
 https://blenderartists.org/t/hair-guides-created-from-mesh-objects/572642
 
 Installation:
-Visit the "Releases" page and download version 0.5.1.
+Visit the 'Releases' page and download version 0.5.1.
 https://github.com/Jandals/HairNet/releases
 
-Then use Blender's "User Preferences" window to "Install Addon From File." Choose the ZIP file you just downloaded and that should be all.
+Then use Blender's 'User Preferences' window to 'Install Addon From File.' Choose the ZIP file you just downloaded and that should be all.
