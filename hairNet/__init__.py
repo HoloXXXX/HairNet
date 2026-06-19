@@ -18,14 +18,10 @@
 
 #TODO: UPDATE LINK TO DOCS IN MANIFEST (and create them)
 
-from . import hair_net
-
-
-
 bl_info = {
         'name':'Hair Net',
         'author': 'Holo, Rhett Jackson',
-        'version': (0,7,1),
+        'version': (1,0,0), # Update data.py version string when updating version #
         'blender': (5,0,0),
         'location': '3dView',
         'category': 'Particle',
@@ -34,11 +30,14 @@ bl_info = {
 
 if 'bpy' in locals():
     import importlib
+    importlib.reload(data)
     importlib.reload(hair_net)
     importlib.reload(ui)
     print('Hair Net successfully reloaded!')
 else:
     import bpy
+    from . import data
+    data.init()
     from . import (
         hair_net,
         ui,
@@ -48,13 +47,16 @@ else:
 # ### REGISTER ###
 
 def register():
+    data.register()
     hair_net.register()
     ui.register()
 
 
 def unregister():
+    data.unregister()
     hair_net.unregister()
     ui.unregister()
 
 if __name__ == '__main__':
     register()
+    print('registering')

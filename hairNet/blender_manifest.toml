@@ -1,7 +1,7 @@
 schema_version = '1.0.0'
 
-id = 'hairNet'
-version = '0.7.0'
+id = 'hair_net'
+version = '1.0.0'
 name = 'Hair Net'
 tagline = 'Converts mesh and curves into hair guides for the particle hair system'
 maintainer = 'Holo' # previously Rhett Jackson
