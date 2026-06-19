@@ -37,7 +37,7 @@ if 'bpy' in locals():
 else:
     import bpy
     from . import data
-    data.init()
+    data.Data.init()
     from . import (
         hair_net,
         ui,

@@ -12,9 +12,6 @@ from bpy.props import (StringProperty,
                        CollectionProperty,
                        )
 
-# update the bl_info in __init__ and blender_manifest.toml when changing this
-version = "1.0.0"
-
 class HairNetProperties(PropertyGroup):
     hair_system: StringProperty(
         name='Hair Net Particle System',
@@ -40,17 +37,30 @@ class HairNetProperties(PropertyGroup):
         default=''
     )
 
-def update_hair_data():
-    '''Splits the current selection into a list of hair objects to be turned into particle hair, and the object that will host the particle system'''
-    global hair_source
-    global proxy_hair_guides
-    global scene
+thing = 3
 
-    scene = bpy.context.scene
+class Data():
+
+    # update the bl_info in __init__ and blender_manifest.toml when changing this
+    version = "1.0.0"
+
+    def __init__(self):
+        self.hair_source
+        self.proxy_hair_guides
+        self.scene
     
-    hair_source = bpy.context.active_object
-    
-    proxy_hair_guides = [ obj for obj in bpy.context.selected_objects if obj is not hair_source]     
+
+
+    def update_hair_data(self):
+        '''Splits the current selection into a list of hair objects to be turned into particle hair, and the object that will host the particle system'''       
+
+        self.scene = bpy.context.scene
+        
+        hair_source = bpy.context.active_object
+        
+        proxy_hair_guides = [ obj for obj in bpy.context.selected_objects if obj is not hair_source]     
+
+
     
 def register():
     bpy.utils.register_class(HairNetProperties)    
