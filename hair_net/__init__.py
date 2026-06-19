@@ -37,7 +37,6 @@ if 'bpy' in locals():
 else:
     import bpy
     from . import data
-    data.Data.init()
     from . import (
         hair_net,
         ui,
@@ -59,4 +58,3 @@ def unregister():
 
 if __name__ == '__main__':
     register()
-    print('registering')

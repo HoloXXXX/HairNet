@@ -12,7 +12,7 @@
 import bpy
 import mathutils
 
-from . import union_find_list, Data, debug
+from . import union_find_list, debug
 
 from bpy.props import EnumProperty
 

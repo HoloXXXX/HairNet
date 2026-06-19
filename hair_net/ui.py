@@ -2,7 +2,7 @@
 
 import bpy
 
-from . import data, Data
+from . import data
 
 
 class HAIRNET_PT_view_panel(bpy.types.Panel):
@@ -16,9 +16,7 @@ class HAIRNET_PT_view_panel(bpy.types.Panel):
 
     def draw(self, context):
         
-        Data.update_hair_data() # I think this is the best place for this unfortunately :( Msg bus can't be used to update on selection
-
-        print(data.thing)
+        data.update_hair_data() # I think this is the best place for this unfortunately :( Msg bus can't be used to update on selection
 
         layout = self.layout 
 
@@ -26,17 +24,17 @@ class HAIRNET_PT_view_panel(bpy.types.Panel):
         box = layout.box()
         row = box.row()
         row.label(text='Hair Source:')
-        if Data.hair_source is not None:
-            row.label(text=Data.hair_source.name)
+        if data.hair_source is not None:
+            row.label(text=data.hair_source.name)
 
         # HAIR PARTICLE SYSTEM   
         row = box.row()
-        row.prop_search(Data.scene.hn_props, 'hair_system',  bpy.data, 'particles')
+        row.prop_search(data.scene.hn_props, 'hair_system',  bpy.data, 'particles')
 
         # ADD GUIDES PROPERTY
         row = box.row()
         row.label(text = 'Add Guides:')
-        row.prop(Data.scene.hn_props, 'additional_guides', text = 'SubD')
+        row.prop(data.scene.hn_props, 'additional_guides', text = 'SubD')
 
         # CONVERT TO PARTICLES BUTTON
         row = layout.row()
@@ -51,16 +49,16 @@ class HAIRNET_PT_view_panel(bpy.types.Panel):
         col.label(text = 'Guide Hairs:')
 
         col = split.column()
-        for proxy_hair in Data.proxy_hair_guides:
+        for proxy_hair in data.proxy_hair_guides:
             col.label(text = proxy_hair.name)
 
         # VERSION / INFO
         vbox = layout.box()
         row = vbox.row()
-        row.label(text= Data.version, icon='PARTICLE_PATH')
+        row.label(text= data.version, icon='PARTICLE_PATH')
         sub = row.row()
         sub.scale_x = .5
-        sub.prop(Data.scene.hn_props, 'info', text = '', icon='QUESTION')
+        sub.prop(data.scene.hn_props, 'info', text = '', icon='QUESTION')
 
 
 
