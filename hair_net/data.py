@@ -43,7 +43,7 @@ def update_hair_data():
     
     hair_source = bpy.context.active_object
     
-    proxy_hair_guides = [ obj for obj in bpy.context.selected_objects if obj is not hair_source]     
+    proxy_hair_guides = [ obj for obj in bpy.context.selected_objects if obj is not hair_source]
     
 def register():
     bpy.utils.register_class(HairNetProperties)    

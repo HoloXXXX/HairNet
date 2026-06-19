@@ -10,11 +10,10 @@
 
 
 import bpy
+import bmesh
 import mathutils
 
-from . import union_find_list, debug
-
-from bpy.props import EnumProperty
+from . import union_find_list, data, debug
 
 mesh_kinds=[
     ('SHEET', 'Sheets','Create hair from sheets'),
@@ -22,202 +21,196 @@ mesh_kinds=[
     ('CURVE', 'Curves','Create hair from curve splines')
 ]
 
-#region Setup
+# Pseudo code to fix this mess:
+'''
+Establish the hair system that will be used
+Sort each object as a curve, fibermesh, or mesh object
+
+Process curves
+Process fibermesh
+Process mesh
+
+Recombine these lists
+
+Build hair in the new hair system from these processed proxies
+
+'''
+
+
+
+
+
+
+
+'''From here https://blender.stackexchange.com/questions/43127/how-do-i-select-specific-vertices-in-blender-using-python-script
+
+import bpy
+
+bpy.ops.object.mode_set(mode = 'OBJECT')
+obj = bpy.context.active_object
+bpy.ops.object.mode_set(mode = 'EDIT') 
+bpy.ops.mesh.select_mode(type="VERT")
+bpy.ops.mesh.select_all(action = 'DESELECT')
+bpy.ops.object.mode_set(mode = 'OBJECT')
+obj.data.vertices[0].select = True
+bpy.ops.object.mode_set(mode = 'EDIT') 
+
+'''
+        
+
+
 
 class HAIRNET_OT_operator (bpy.types.Operator):
     bl_idname = 'hairnet.operator'
-    bl_label = 'HairNet'
+    bl_label = 'Hair Net'
     bl_options = {'REGISTER', 'UNDO'}
-    bl_description = 'Turns proxy hair (in the form of fibermesh, mesh, and curves) into particle hair.'
+    bl_description = 'Turns proxy hair into particle hair.'
 
-    meshKind : EnumProperty(items=mesh_kinds, name='Generator kind', default='FIBER')
+    curve_list = []
+    fibermesh_list = []
+    sheet_list = []
+    other_type_list = []
     
-    targetHead = False
-    hair_source = 0
-    proxyHairObjects = []
-    hairProxyList = []
+    hair_proxy_list = []
     
     @classmethod
     def poll(self, context):
         return(context.mode == 'OBJECT')
+    
+    #region Reporting
+    
+    def initial_user_report(self, context):
+        '''Reports to the user in the info box. Names the hair system that will be used, then lists the proxy objects by type, and finally outputs warnings for invalid types.'''
 
+        self.report({'INFO'}, ''.join(['Using ', context.scene.hn_props.hair_system, ' as the hair system.']))
+        proxies = []
+        
+        proxies.append('CURVES:')
+        for proxy in self.curve_list:
+            proxies.append(''.join([' --- ', proxy.name]))
+
+        
+        proxies.append('FIBERMESH:')
+        for proxy in self.fibermesh_list:
+            proxies.append(''.join([' --- ', proxy.name]))
+
+        proxies.append('SHEETS:')
+        for proxy in self.sheet_list:
+            proxies.append(''.join([' --- ', proxy.name]))
+        
+        self.report({'INFO'}, ''.join(['Building particle hair with "', data.hair_source.name, '" as the hair source and the following as the hair guides:\n', '\n'.join(proxies)]))
+
+        for proxy in self.other_type_list:
+            self.report({'WARNING'}, ''.join(['Object ', proxy.name, ' is invalid type ', proxy.type, ' --- continuing']))
+
+    #endregion
+    
     def execute(self, context):
-        debugging = False
-        error = 0   #0 = All good
-                    #1 = Hair guides have different lengths
-                    #2 = No seams in hair object
-                    #3 = Bevel on curve object
 
-        targetObject = self.hair_source
 
-        for thisHairObj in self.proxyHairObjects:
-            options = [
-                       0,                   #0 the hair system's previous settings
-                       thisHairObj,         #1 The hair object
-                       0,                   #2 The hair system. So we don't have to rely on the selected system
-                       self.targetHead,      #3 Target a head object?
-                       targetObject,         #4 targetObject
-                       'name'               #5 particle system name
-                       ]
+        self.set_particle_system(context)
 
-            #Get dependency graph
-            '''depsgraph = bpy.context.evaluated_depsgraph_get()
-            thisHairObj = thisHairObj.evaluated_get(depsgraph)
-            options[1] = thisHairObj'''
-            
-            #A new hair object gets a new guides list
-            hairGuides = []
+        self.fibermesh_list, self.curve_list, self.sheet_list, self.other_type_list = self.sort_proxies(context)
 
-            #if not self.targetHead:
-            
-                
-            #targetObject = targetObject.evaluated_get(depsgraph)
-            
+        self.initial_user_report(context)
 
-            config=data.scene.hn_props
-            
-            sysName = ''.join(['HN', thisHairObj.name])
-            options[5] = sysName
-
-            if sysName in targetObject.particle_systems:
-                #if this proxy object has an existing hair system on the target object, preserve its current settings
-                if config.masterHairSystem == '':
-                    '''_TS Preserve and out'''
-                    options[0] = targetObject.particle_systems[sysName].settings
-                    options[2] = targetObject.particle_systems[sysName]
-
-                else:
-                    '''TS Delete settings, copy, and out'''
-                    #Store a link to the system settings so we can delete the settings
-                    delSet = targetObject.particle_systems[sysName].settings
-                    
-                    #Delete Particle System
-                    remove_particle_system(targetObject, targetObject.particle_systems[sysName])
-                    #Delete Particle System Settings
-                    bpy.data.particles.remove(delSet)
-                    #Copy Hair settings from master.
-                    options[0] = bpy.data.particles[config.masterHairSystem].copy()
-
-                    options[2] = make_new_hair_system(targetObject,sysName)
-            else:
-                #Create a new hair system
-                if config.masterHairSystem != '':
-                    '''T_S copy, create new and out'''
-                    options[0] = bpy.data.particles[config.masterHairSystem].copy()
-#                     options[2] = self.headObj.particle_systems[sysName]
-
-                '''_T_S create new and out'''
-                options[2] = make_new_hair_system(targetObject,sysName)
-
-            if (self.meshKind=='SHEET'):
-                if debugging: print('Hair sheet ' + thisHairObj.name)
-                #Create all hair guides
-                #for hairObj in self.hairObjList:
-                #Identify the seams and their vertices
-                #Start looking here for multiple mesh problems.
-                seamVerts, seamEdges, error = get_seams(thisHairObj)
-
-                if(error == 0):
-                    vert_edges = edge_faces = False
-                    #For every vert in a seam, get the edge loop spawned by it
-                    for thisVert in seamVerts:
-                        edgeLoops, vert_edges, edge_faces = get_loops(thisHairObj, thisHairObj.data.vertices[thisVert], vert_edges, edge_faces, seamEdges)
-                        '''Is loopsToGuides() adding to the count of guides instead of overwriting?'''
-                        hairGuides = self.loops_to_guides(thisHairObj, edgeLoops, hairGuides)
-                    if debugging: debug.print_hairguides(hairGuides)
-                    #Take each edge loop and extract coordinate data from its verts
-
-            if (self.meshKind=='FIBER'):
-                hairObj = thisHairObj
-                if debugging: print('Hair fiber')
-                hairGuides = self.fibers_to_guides(hairObj)
-
-            if (self.meshKind=='CURVE'):
-                #Preserve Active and selected objects
-                tempActive = headObj = bpy.context.object
-                tempSelected = []
-                tempSelected.append(bpy.context.selected_objects[0])
-                tempSelected.append(bpy.context.selected_objects[1])
-                #hairObj = bpy.context.selected_objects[0]
-                hairObj = thisHairObj
-                bpy.ops.object.select_all(action='DESELECT')
-                
-                if hairObj.data.bevel_depth > 0.0:
-                    error = 3
-
-                bpy.context.view_layer.objects.active=hairObj
-                hairObj.select_set(state=True)
-
-                if debugging: print('Curve Head: ', headObj.name)
-                bpy.ops.object.convert(target='MESH', keep_original=True)
-                fiberObj = bpy.context.active_object
-
-                if debugging:
-                    print('Hair Fibers: ', fiberObj.name)
-                    print('Hair Curves: ', hairObj.name)
-
-                hairGuides = self.fibers_to_guides(fiberObj)
-
-                bpy.ops.object.delete(use_global=False)
-
-                #Restore active object and selection
-                bpy.context.view_layer.objects.active=tempActive
-                bpy.ops.object.select_all(action='DESELECT')
-                for sel in tempSelected:
-                    sel.select_set(state=True)
-    #            return {'FINISHED'}
-
-            if (self.check_guides(hairGuides)):
-                error = 1
-
-            #Process errors
-            if error != 0:
-                if error == 1:
-                    self.report(type = {'ERROR'}, message = 'Mesh guides have different lengths')
-                if error == 2:
-                    self.report(type = {'ERROR'}, message = ('No seams were defined in ' + targetObject.name))
-                    remove_particle_system(targetObject, options[2])
-                if error == 3:
-                    self.report(type = {'ERROR'}, message = 'Cannot create hair from curves with a bevel object')
-                return{'CANCELLED'}
-
-            #Subdivide hairs
-            hairGuides = self.subdivide_guide_hairs(hairGuides, thisHairObj)
-
-            #Create the hair guides on the hair object
-            self.create_hair(targetObject, hairGuides, options)
 
         return {'FINISHED'}
+    
+    #region Setup
 
-    def invoke (self, context, event):
+    def set_particle_system(self,context):
+        '''Sets up a new particle system if the user left it blank'''
+        if context.scene.hn_props.hair_system != '':
+            return
+        index = len(data.hair_source.particle_systems) # this will get the index of the new particle system
+        bpy.ops.object.particle_system_add()
+        return data.hair_source.particle_systems[index].name    
+    
+    def sort_proxies(self, context):
+        '''Sorts the input proxy hair guides. Returns fibermesh, curves, and sheet mesh lists'''
+        fm_list = []
+        c_list = []
+        s_list = []
+        o_list = []
+        for proxy in data.proxy_hair_guides:
+            match proxy.data.id_type:
+                case 'CURVE':
+                    c_list.append(proxy)
+                case 'MESH':
+                    if self.fiber_or_sheet(proxy.data):
+                        fm_list.append(proxy)
+                    else:
+                        s_list.append(proxy)
+                case _:
+                    o_list.append(proxy)
 
-        self.hair_source = bpy.context.object
+        return fm_list, c_list, s_list, o_list
+                    
+    def fiber_or_sheet(self, proxy):
+        '''Determines if the user intended a mesh object to be a fiber or a sheet by checking if any vertex has more than 2 edges attached'''
+        print('Iterating over ' + proxy.name)
 
-        #Get a list of hair objects
-        self.proxyHairObjects = []
-        for obj in bpy.context.selected_objects:
-            if obj != self.hair_source:
-                self.proxyHairObjects.append(obj)
+        proxy_bm = bmesh.new()
+        proxy_bm.from_mesh(proxy)
+
+        for vert in proxy_bm.verts:
+            print(len(vert.link_edges))
+            if len(vert.link_edges) > 2:
+                return False
+                
+        return True
+    
+    #endregion
+
+    #region Processing Hair Guides
+
+    def process_curves():
+        return
+
+    def process_fibermesh():
+        return
+
+    def process_sheets():
+        return
 
 
-        #if the last object selected is not flagged as a self-emitter, then assume we are creating hair on a head
-        #Otherwise, each proxy will grow its own hair
+    #endregion
 
+    #region Building Particle Hair
 
-
-            #  REPLACE THIS CODE###############################################################################
-        #if not self.hair_source.hn_props.isEmitter:
-        #    self.targetHead=True
-        #    if len(bpy.context.selected_objects) < 2:
-        #        self.report(type = {'ERROR'}, message = 'Selection too small. Please select two objects')
-        #        return {'CANCELLED'}
-        #else:
-        #    self.targetHead=False
+    #endregion
 
 
 
 
-        return self.execute(context)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     def check_guides(self, hairGuides):
         length = 0
@@ -457,12 +450,12 @@ class HAIRNET_OT_operator (bpy.types.Operator):
             guides = newHairs
 
         return guides  
+    
 
 
 
-#endregion
 
-#region Processing Guides
+
 
 def get_seams(obj):
     debugging = False
@@ -748,14 +741,12 @@ def sort_seam_verts(verts, edges):
 def total_number_subdivisions(points, cuts):
     return points + (points - 1)*cuts
 
-#endregion
 
-#region Converting to particles
 
 def make_new_hair_system(headObject,systemName):
     bpy.ops.object.mode_set(mode='OBJECT')
     #Adding a particle modifier also works but requires pushing/pulling the active object and selection.
-    headObject.modifiers.new('HairNet', 'PARTICLE_SYSTEM')
+    data.hair_source.modifiers.new('HairNet', 'PARTICLE_SYSTEM')
 
     #Set up context override
 #    override = {'object': headObject, 'particle_system': systemName}
@@ -765,7 +756,6 @@ def make_new_hair_system(headObject,systemName):
     headObject.particle_systems[-1].settings.render_step = 5
     return headObject.particle_systems[systemName]
 
-#endregion
 
 
 
