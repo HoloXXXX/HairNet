@@ -16,13 +16,18 @@ from bpy.props import (StringProperty,
 version = "1.0.0"    
 
 class HairNetProperties(PropertyGroup):
-    hair_system: StringProperty(
-        name='Hair Net Particle System',
-        description='Name of the hair system to be copied by this proxy object. If you want to generate a new particle system, leave this blank.',
+    particle_settings: StringProperty(
+        name='Particle Settings',
+        description='Particle settings to be copied to the new particle system. If you want to generate new settings, leave this blank.',
         default='')
+    
+    add_to_existing: BoolProperty(
+        name='Add To Existing Hair System',
+        description='Add the guide hairs to the active particle system. Requires an existing particle system to be active',
+        default=False)
 
     additional_guides: IntProperty(
-            name='Hair Net Additional Hair Guides',
+            name='Additional Hair Guides',
             description='Number of additional hairs to add.',
             default=0)
     
@@ -46,7 +51,7 @@ def update_hair_data():
     proxy_hair_guides = [ obj for obj in bpy.context.selected_objects if obj is not hair_source]
     
 def register():
-    bpy.utils.register_class(HairNetProperties)    
+    bpy.utils.register_class(HairNetProperties)
     bpy.types.Scene.hn_props=PointerProperty(type=HairNetProperties)
 
 def unregister():
