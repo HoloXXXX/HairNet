@@ -16,7 +16,6 @@
 #
 #---------------------------------------------------
 
-
 import bpy
 import bmesh
 from mathutils import Vector
@@ -80,7 +79,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
     
     def set_hair_root_object(self, context):
         if context.scene.hn_props.root_object == True:
-            self.hair_root_loc = bpy.data.objects[context.scene.hn_props.root_object]
+            self.hair_root_loc = bpy.data.objects[context.scene.hn_props.root_object].location
         self.hair_root_loc = self.get_object_center(data.hair_source)
     
     def add_to_existing_system(self):
@@ -149,7 +148,6 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         proxies.append('CURVES:')
         for proxy in self.curve_list:
             proxies.append(''.join([' --- ', proxy.name]))
-
         
         proxies.append('FIBERMESH:')
         for proxy in self.fibermesh_list:
@@ -171,24 +169,8 @@ class HAIRNET_OT_operator (bpy.types.Operator):
 
     #region Processing Hair Guides
 
-    def process_curves(self, context):
-        new_fibermesh = []
-        for curve in self.curve_list:
-            # Conversion code from https://blender.stackexchange.com/questions/265215/how-can-i-convert-a-curve-to-a-mesh-object
-            fiber = curve.to_mesh()
-            new_fiber = bpy.data.objects.new(curve.name + "Mesh", fiber.copy())
-            new_fiber.matrix_world = curve.matrix_world
-            bpy.context.collection.objects.link(new_fiber)
-            new_fibermesh.append(new_fiber)
+    #region Fibermesh
 
-        self.process_fibermesh(context, new_fibermesh)
-        
-        bpy.ops.object.select_all(action='DESELECT')
-        bpy.context.evaluated_depsgraph_get()
-
-        for obj in new_fibermesh:
-            obj.select_set(True)
-        bpy.ops.object.delete()
 
     def process_fibermesh(self, context, mesh_list):       
 
@@ -207,40 +189,12 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                 continue
                             
             root_vert = self.decide_root(context, end_verts)
-            self.edge_walk_new_guide(root_vert)
+            self.fiber_to_guide_co(root_vert)
 
             proxy_bm.free()
 
         return
 
-    def process_sheets(self, context):
-        self.get_seams()
-        # get non seam edges attached to seam
-        # loop select them
-        # dupe, del everything not the edge
-        # send to fibermesh pipe
-        # del mesh
-        return
-
-    def get_seams(self):
-        for proxy in self.sheet_list:
-
-            proxy_bm = bmesh.new()
-            proxy_bm.from_mesh(proxy.data)
-            seam_verts = []
-            
-            # gets all of the seam verts
-            for edge in proxy_bm.edges:
-                if edge.seam == True:
-                    for vert in edge:
-                        if vert not in seam_verts:
-                            seam_verts.append(edge)
-
-            # gets the non seam edges attached
-            #for vert in seam_verts:
-            #    for edge in vert.link_edges:
-            #return
-    
     def decide_root(self, context, end_verts):
         '''This function takes in verts with only one edge and decides which of these will become the root.'''
 
@@ -254,11 +208,12 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         closest_vert = end_verts[0]
         for vert in end_verts:
             if vert.co - self.hair_root_loc < closest_vert.co - self.hair_root_loc:
-                vert = closest_vert
+                closest_vert = vert
 
         return closest_vert
     
-    def edge_walk_new_guide(self, root_vert):
+    def fiber_to_guide_co(self, root_vert):
+            '''Adds vert coordinates to guide list in order of edge connections'''
             guide = []
             guide.append(root_vert.co)
             current_vert = root_vert
@@ -279,6 +234,157 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                     break
             
             self.hair_guides.append(guide)
+    
+    #endregion
+
+    #region Curves
+    
+    def process_curves(self, context):
+        new_fibers = []
+        for curve in self.curve_list:
+            # Conversion code from https://blender.stackexchange.com/questions/265215/how-can-i-convert-a-curve-to-a-mesh-object
+            fiber = curve.to_mesh()
+            new_fiber = bpy.data.objects.new(curve.name + "Mesh", fiber.copy())
+            new_fiber.matrix_world = curve.matrix_world
+            bpy.context.collection.objects.link(new_fiber)
+            new_fibers.append(new_fiber)
+
+        self.process_fibermesh(context, new_fibers)
+        
+        bpy.ops.object.select_all(action='DESELECT')
+
+        for obj in new_fibers:
+            obj.select_set(True)
+        bpy.ops.object.delete()    
+
+    def process_sheets(self, context):
+
+        new_fibers = []
+
+        for proxy in self.sheet_list:
+
+            proxy_bm = bmesh.new()
+            proxy_bm.from_mesh(proxy.data)
+
+            loop_edges = self.get_seams(proxy, proxy_bm)
+
+            if len(loop_edges) == 0:
+                    self.report({'WARNING'}, ''.join(['No valid seams found on ', proxy.name, ' and therefore excluded --- continuing']))
+
+            new_fibers = self.fibers_from_sheet_mesh(proxy, proxy_bm, loop_edges, new_fibers)
+
+        self.process_fibermesh(context, new_fibers)
+
+        bpy.ops.object.select_all(action='DESELECT')
+
+        for obj in new_fibers:
+            obj.select_set(True)
+        bpy.ops.object.delete()
+
+        return
+
+    def get_seams(self, proxy, proxy_bm):
+
+        seam_verts = []
+        loop_edges = []
+        
+        for edge in proxy_bm.edges:
+            if edge.seam == True:
+                for vert in edge.verts:
+                    if vert not in seam_verts:
+                        seam_verts.append(vert)
+
+        for vert in seam_verts:
+            for edge in vert.link_edges:
+                if edge.seam == False:
+                    loop_edges.append(edge)
+
+        return loop_edges
+    
+    def get_edge_loops(self, proxy, proxy_bm):
+
+        seam_verts = []
+        loop_edges = []
+        
+        for edge in proxy_bm.edges:
+            if edge.seam == True:
+                for vert in edge.verts:
+                    if vert not in seam_verts:
+                        seam_verts.append(vert)
+
+        for vert in seam_verts:
+            for edge in vert.link_edges:
+                if edge.seam == False:
+                    loop_edges.append(edge)
+
+        return loop_edges
+    
+    def fibers_from_sheet_mesh(self, proxy, proxy_bm, loop_edges, new_fibers):
+
+        for edge in loop_edges:            
+            # from here https://blender.stackexchange.com/questions/105222/how-do-you-select-an-edge-loop-with-bmesh
+            for loop in edge.link_loops:
+
+                new_edges = []
+                new_verts = []
+
+                if len(loop.vert.link_edges) == 4:
+
+                    new_edges.append(edge)
+                    for vert in edge.verts:
+                        new_verts.append(vert)
+                    
+                    while len(loop.vert.link_edges) == 4:
+                        # jump between BMLoops to the next BMLoop we need
+                        loop = loop.link_loop_prev.link_loop_radial_prev.link_loop_prev
+
+                        # add new components to lists
+                        new_verts.append(loop.link_loop_prev)
+                        new_edges.append(loop.edge)
+                
+                #CREATE NEW MESH AND ADD TO LIST
+                #bm_loop = bmesh.new()
+                #bm_loop = bmesh.ops.duplicate(proxy_bm, geom=new_loop, use_select_history=True)
+                #new_fibermesh = bm_loop.to_mesh()
+                #new_fiber_object = bpy.data.objects.new(proxy.name + "Sheet_Fiber", new_fibermesh)
+                #new_fiber_object.matrix_world = proxy.matrix_world
+                #bpy.context.collection.objects.link(new_fiber_object)
+                #new_fibers.append(new_fiber_object)
+
+
+
+                # CREATES A NEW MESH AND ADDS COMPONENTS
+                bm = bmesh.new()
+
+                add_vert = bm.verts.new
+                add_edge = bm.edges.new
+
+                offset = len(bm.verts)
+
+                for v in proxy_bm.verts:
+                    add_vert(v.co)
+
+                bm.verts.index_update()
+                bm.verts.ensure_lookup_table()
+
+                if proxy_bm.edges:
+                    for edge in proxy_bm.edges:
+                        edge_seq = tuple(bm.verts[i.index+offset] for i in edge.verts)
+                        try:
+                            add_edge(edge_seq)
+                        except ValueError:
+                            # edge exists!
+                            pass
+                    bm.edges.index_update()
+
+                print(bm)
+                new_fibermesh = bm.to_mesh()
+                new_fiber_object = bpy.data.objects.new(proxy.name + "Sheet_Fiber", new_fibermesh)
+                new_fiber_object.matrix_world = proxy.matrix_world
+                bpy.context.collection.objects.link(new_fiber_object)
+                new_fibers.append(new_fiber_object)
+        
+        return new_fibers
     
     def get_object_center(self, object):
         # from https://blender.stackexchange.com/questions/62040/get-center-of-geometry-of-an-object
@@ -310,6 +416,9 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         ps_name = data.hair_source.particle_systems.active.name
         ps = data.hair_source.particle_systems.active
 
+        # getting the current particles is important when adding to an existing system
+        current_particles = len(data.hair_source.particle_systems.active.particles)
+
         for i in range(0,len(self.hair_guides)):
 
             guide = self.hair_guides[i]
@@ -325,7 +434,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
             depObj = data.hair_source.evaluated_get(depsgraph)
             ps = depObj.particle_systems[ps_name]
 
-            new_particle = ps.particles[i]
+            new_particle = ps.particles[current_particles + i]
             new_particle.location = guide[0]
 
             for j in range(0, len(guide)):

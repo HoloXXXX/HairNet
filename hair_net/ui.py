@@ -64,11 +64,11 @@ class HAIRNET_PT_advanced_panel(bpy.types.Panel):
         
         # ROOT SELECT MODE
         row = layout.row()
-        row.prop(data.scene.hn_props, 'root_select_mode')        
+        row.prop(data.scene.hn_props, 'root_select_mode')
 
         # ROOT OBJECT
         row = layout.row()
-        row.prop_search(data.scene.hn_props, 'root_mesh', bpy.data, 'objects', text='Root Object')
+        row.prop_search(data.scene.hn_props, 'root_object', bpy.data, 'objects', text='Root Object')
 
 
 class HAIRNET_PT_hair_objects_panel(bpy.types.Panel):

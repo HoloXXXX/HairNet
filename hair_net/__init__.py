@@ -18,8 +18,6 @@
 
 #TODO: UPDATE LINK TO DOCS IN MANIFEST (and create them)
 
-# Add guides feature was implemented(?) in Jandals version, but due to the difficulty of implementing it well I'm choosing not to include it.
-
 bl_info = {
         'name':'Hair Net',
         'author': 'Holo, Rhett Jackson',
@@ -43,9 +41,6 @@ else:
         hair_net,
         ui,
     )
-
-
-# ### REGISTER ###
 
 def register():
     data.register()

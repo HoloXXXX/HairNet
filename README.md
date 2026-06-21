@@ -16,6 +16,8 @@ https://github.com/Jandals/HairNet/releases
 
 Then use Blender's 'User Preferences' window to 'Install Addon From File.' Choose the ZIP file you just downloaded and that should be all.
 
+This tool is as good as your mesh, make sure to merge by distance and separate different fibers/curves into different objects
+
 Root select mode and custom vector for comparing roots to
 
 Hide proxies when finished
@@ -32,8 +34,15 @@ It's recommended after running this that you clean up unused data in the scene i
 
 Need to make sure that both objects have the same transform (unless you want an offset)
 
+Mention frame selected
+
+Will leave a lot of extra meshes in your scene, may want to cleanup after
+
+TODO object offset
+
 One curve per object
 
 PLACES TO IMPROVE:
 Break the steps up into a configuration step, that ends directly after the initial report, and an execution step. This would allow people who have very complicated hair guides to see if their hair will finish the way they want it to before they sink the time.
 Multiply the vertex coords by the offset between the objects so the same transform isn't required
+Rewrite so meshes aren't left over in scene
