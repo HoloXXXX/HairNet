@@ -13,7 +13,7 @@ from bpy.props import (StringProperty,
                        )
 
 # update the bl_info in __init__ and blender_manifest.toml when changing this
-version = "1.0.0"    
+version = "1.0.0"
 
 class HairNetProperties(PropertyGroup):
     particle_settings: StringProperty(
@@ -21,22 +21,33 @@ class HairNetProperties(PropertyGroup):
         description='Particle settings to be copied to the new particle system. If you want to generate new settings, leave this blank.',
         default='')
     
+    root_object: StringProperty(
+        name='Root Object',
+        description='Select an object to use as an indicator for which side of the hair should be the root.',
+        default='')
+    
     add_to_existing: BoolProperty(
         name='Add To Existing Hair System',
-        description='Add the guide hairs to the active particle system. Requires an existing particle system to be active',
+        description='Add the guide hairs to the active particle system. Requires an existing particle system to be active.',
         default=False)
-
-    additional_guides: IntProperty(
-            name='Additional Hair Guides',
-            description='Number of additional hairs to add.',
-            default=0)
+    
+    hide_proxies: BoolProperty(
+        name='Hide Proxies',
+        description='Hide proxy hair after conversion into particle hair.',
+        default=False)
+    
+    root_select_mode: BoolProperty(
+        name='Root Select Mode',
+        description='This is a tool to fix reversed roots. When checked, selected vertices on hairs will be prioritized for determining roots.',
+        default=False)
     
     info: StringProperty(
         name='Hair Net Info',
         description='In order to use the add-on, select all of the objects you want to use as hair guides, then select the object you want the hair to grow from.' \
         'For more info, please see the ReadMe',
         default=''
-    )
+        )
+    
 
 def update_hair_data():
     '''Splits the current selection into a list of hair objects to be turned into particle hair, and the object that will host the particle system'''

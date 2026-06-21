@@ -16,6 +16,24 @@ https://github.com/Jandals/HairNet/releases
 
 Then use Blender's 'User Preferences' window to 'Install Addon From File.' Choose the ZIP file you just downloaded and that should be all.
 
+Root select mode and custom vector for comparing roots to
+
+Hide proxies when finished
+
+Recommend merge by distance
+
+I recommend converting curves to mesh so you can determine the exact amount of verts you want
+
+This add on assumes you have no hidden geometry
+
+Prioritize root selection (if active) then root object comparison then hair source mesh comparison. For root selection you must select a vertex with only one edge connected
+
+It's recommended after running this that you clean up unused data in the scene if you feel it's dragging
+
+Need to make sure that both objects have the same transform (unless you want an offset)
+
+One curve per object
 
 PLACES TO IMPROVE:
 Break the steps up into a configuration step, that ends directly after the initial report, and an execution step. This would allow people who have very complicated hair guides to see if their hair will finish the way they want it to before they sink the time.
+Multiply the vertex coords by the offset between the objects so the same transform isn't required
