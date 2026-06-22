@@ -237,9 +237,6 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                 if inf_block == context.scene.hn_props.max_keys:
                     self.report({'WARNING'}, ''.join(['Fiber ', proxy.name, ' hit max key amount. Discarding fiber. --- continuing']))
                     return
-                
-            for vert in guide:
-                print(vert)
 
             self.hair_guides.append(guide)
     
@@ -393,22 +390,16 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         bpy.context.scene.tool_settings.particle_edit.use_preserve_root =  False
         bpy.context.scene.tool_settings.particle_edit.use_preserve_length = False
 
-        ps_name = data.hair_source.particle_systems.active.name
         ps = data.hair_source.particle_systems.active
-
-        current_particles = len(data.hair_source.particle_systems.active.particles)
-        
-        bpy.types.RenderSettings.use_lock_interface
 
         for i in range(0,len(self.hair_guides)):
 
             guide = self.hair_guides[i]
             bpy.context.scene.tool_settings.particle_edit.default_key_count = len(guide)
-            particle_amount = len(ps.particles)
 
             depsgraph = bpy.context.evaluated_depsgraph_get()
             depObj = data.hair_source.evaluated_get(depsgraph)
-            ps = depObj.particle_systems[ps_name]
+            ps = depObj.particle_systems.active
 
             # From what I can work out there are 3 requirements for brush edit to complete successfully. 
             # 1. The space must be view3d. 
@@ -419,28 +410,17 @@ class HAIRNET_OT_operator (bpy.types.Operator):
             # I don't understand fully how this works, but it seems like the dependency graph has to be updated in order for the loop to keep up with the current # and location of particles
             depsgraph = bpy.context.evaluated_depsgraph_get()
             depObj = data.hair_source.evaluated_get(depsgraph)
-            ps = depObj.particle_systems[ps_name]
+            ps = depObj.particle_systems.active
 
-            print(str(particle_amount))
-            print(str(len(ps.particles)))
-
-            if particle_amount == len(ps.particles):
-                self.report({'ERROR'}, 'Unable to create particle. See troubleshooting "framing selected" for help. --- Cancelling')
-                return
-
-            new_particle = ps.particles[current_particles + i]
+            new_particle = ps.particles[-1]
             new_particle.location = guide[0]
-
-            depsgraph = bpy.context.evaluated_depsgraph_get()
-            depObj = data.hair_source.evaluated_get(depsgraph)
-            ps = depObj.particle_systems[ps_name]
 
             for j in range(0, len(guide)):
                 depsgraph = bpy.context.evaluated_depsgraph_get()
                 depObj = data.hair_source.evaluated_get(depsgraph)
-                ps = depObj.particle_systems[ps_name]
-                h = new_particle.hair_keys[j]
-                h.co = guide[j]
+                ps = depObj.particle_systems.active
+
+                ps.particles[-1].co = guide[j]
                 
         # THIS IS NEEDED TO MAKE THE KEY CHANGES TO THE LAST PARTICLE STICK. I don't know why, and I don't ask questions of the machine gods who rule us
         bpy.ops.particle.brush_edit(stroke=[{"name":"", "location":(0, 0, 0), "mouse":(-10000,-10000), "mouse_event":(0, 0), "pressure":0, "size":0, "x_tilt":0, "y_tilt":0, "time":0, "is_start":False}], pen_flip=False)
