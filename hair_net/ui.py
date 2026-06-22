@@ -70,6 +70,13 @@ class HAIRNET_PT_advanced_panel(bpy.types.Panel):
         row = layout.row()
         row.prop_search(data.scene.hn_props, 'root_object', bpy.data, 'objects', text='Root Object')
 
+        layout.use_property_split = True
+
+        # ROOT OBJECT
+        col = layout.column()
+        sub = col.column()
+        sub.prop(data.scene.hn_props, 'max_keys')
+
 
 class HAIRNET_PT_hair_objects_panel(bpy.types.Panel):
     bl_label = 'Hair Objects'
@@ -104,8 +111,8 @@ class HAIRNET_PT_hair_objects_panel(bpy.types.Panel):
 
 class HAIRNET_OT_readme(bpy.types.Operator):
     bl_idname = 'hairnet_readme.operator'
-    bl_label = 'Hair Net Readme Link'
-    bl_description = 'Links to Hair Net readme.'
+    bl_label = 'Hair Net README'
+    bl_description = 'Links to Hair Net README.'
 
     def execute(self, context):
 

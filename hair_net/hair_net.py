@@ -33,27 +33,22 @@ class HAIRNET_OT_operator (bpy.types.Operator):
     def poll(self, context):
         return(context.mode == 'OBJECT')
     
-    #region Reporting
-
-    #endregion
-    
     def execute(self, context):
         
         # INIT
         self.hair_root_loc = object
-        self.curve_list = []
-        self.beveled_curve_list = []
         self.fibermesh_list = []
+        self.curve_list = []
         self.sheet_list = []
+        self.beveled_curve_list = []
         self.other_type_list = []        
         self.hair_guides = []
 
         # SETUP
         if self.set_particle_system(context) == False: return {'CANCELLED'}
-        data.hair_source.particle_systems.active.settings.display_step = 7
         self.set_hair_root_object(context)
         self.sort_proxies(context)
-        self.initial_user_report(context)
+        if self.initial_user_report(context) == False: return {'CANCELLED'}
 
         # PROCESSING PROXIES INTO GUIDES
         self.process_fibermesh(context, self.fibermesh_list)
@@ -78,11 +73,21 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         return True
     
     def set_hair_root_object(self, context):
+        '''Sets what object will be used when determing which vert of a fiber or curve to set as the root.'''
         if context.scene.hn_props.root_object == True:
             self.hair_root_loc = bpy.data.objects[context.scene.hn_props.root_object].location
         self.hair_root_loc = self.get_object_center(data.hair_source)
     
+    def get_object_center(self, object):
+        # from https://blender.stackexchange.com/questions/62040/get-center-of-geometry-of-an-object
+        x, y, z = [ sum( [v.co[i] for v in object.data.vertices] ) for i in range(3)]
+
+        count = float(len(object.data.vertices))
+
+        return object.matrix_world @ (Vector( (x, y, z ) ) / count )
+    
     def add_to_existing_system(self):
+        '''Handles error checking for adding to an existing particle system'''
         if data.hair_source.particle_systems.active == None:
             self.report({'ERROR_INVALID_INPUT'}, 'You need to have an active particle system on the object to add to an existing hair system.')
             return False
@@ -92,6 +97,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         return True
 
     def set_particle_system_settings(self, context):
+        '''Sets the particle settings for a new particle system'''
 
         if context.scene.hn_props.particle_settings == '':
             data.hair_source.particle_systems.active.settings.type = 'HAIR'
@@ -104,7 +110,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                 return True
     
     def sort_proxies(self, context):
-        '''Sorts the input proxy hair guides. Returns fibermesh, curves, and sheet mesh lists'''
+        '''Sorts the input proxy hair guides. Returns fibermesh, curves, sheet mesh, beveled curves, and "other" type lists'''
         for proxy in data.proxy_hair_guides:
             match proxy.data.id_type:
                 case 'CURVE':
@@ -120,29 +126,26 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                 case _:
                     self.other_type_list.append(proxy)
                     
-    def fiber_or_sheet(self, proxy):
-        '''Determines if the user intended a mesh object to be a fiber or a sheet by checking if any vertex has more than 2 edges attached'''
-
-        proxy_bm = bmesh.new()
-        proxy_bm.from_mesh(proxy)
-
-        for vert in proxy_bm.verts:
-            if len(vert.link_edges) > 2:
-                proxy_bm.free()
-                return False
-        
-        proxy_bm.free()
-        return True
+    def fiber_or_sheet(self, mesh):
+        '''Determines if the user intended a mesh object to be a fiber or a sheet by checking if there is a face in the mesh'''
+        if len(mesh.polygons) == 0:
+            return True        
+        return False
     
     def initial_user_report(self, context):
-        '''Reports to the user in the info box. Names the hair system that will be used, then lists the proxy objects by type, and finally outputs warnings for invalid types.'''
+        '''Reports to the user in the info box. Names the hair system that will be used, then lists the proxy objects by type, and finally outputs warnings for invalid objects.'''
 
-        ps_report = ''.join(['Using ', context.scene.hn_props.particle_settings, ' as the particle settings.'])
+        _continue = True
 
-        if context.scene.hn_props.particle_settings == '':
-            ps_report = 'Using new particle settings.'
+        if context.scene.hn_props.add_to_existing == True:
+            ps_report = ''.join(['Using existing particle system ', data.hair_source.particle_systems.active.name])
+        else:
+            ps_report = ''.join(['Using ', context.scene.hn_props.particle_settings, ' as the particle settings.'])
+            if context.scene.hn_props.particle_settings == '':
+                ps_report = 'Using new particle settings.'
 
         self.report({'INFO'}, ps_report)
+        
         proxies = []
         
         proxies.append('CURVES:')
@@ -156,21 +159,26 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         proxies.append('SHEETS:')
         for proxy in self.sheet_list:
             proxies.append(''.join([' --- ', proxy.name]))
-        
-        self.report({'INFO'}, ''.join(['Building particle hair with "', data.hair_source.name, '" as the hair source and the following as the hair guides:\n', '\n'.join(proxies)]))
+
+        if len(proxies) == 3:
+            self.report({'WARNING'}, 'Please select at least one valid proxy object.')
+            _continue = False
+        else:       
+            self.report({'INFO'}, ''.join(['Building particle hair with "', data.hair_source.name, '" as the hair source and the following as the hair guides:\n', '\n'.join(proxies)]))
 
         for proxy in self.beveled_curve_list:
             self.report({'WARNING'}, ''.join(['Curve ', proxy.name, ' is beveled and therefore excluded --- continuing']))
 
         for proxy in self.other_type_list:
             self.report({'WARNING'}, ''.join(['Object ', proxy.name, ' is invalid type ', proxy.type, ' --- continuing']))
+
+        return _continue
     
     #endregion
 
     #region Processing Hair Guides
 
     #region Fibermesh
-
 
     def process_fibermesh(self, context, mesh_list):       
 
@@ -189,11 +197,9 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                 continue
                             
             root_vert = self.decide_root(context, end_verts)
-            self.fiber_to_guide_co(root_vert)
+            self.fibers_to_vert_co(context, proxy, root_vert)
 
             proxy_bm.free()
-
-        return
 
     def decide_root(self, context, end_verts):
         '''This function takes in verts with only one edge and decides which of these will become the root.'''
@@ -212,13 +218,14 @@ class HAIRNET_OT_operator (bpy.types.Operator):
 
         return closest_vert
     
-    def fiber_to_guide_co(self, root_vert):
+    def fibers_to_vert_co(self, context, proxy, root_vert):
             '''Adds vert coordinates to guide list in order of edge connections'''
             guide = []
             guide.append(root_vert.co)
             current_vert = root_vert
             current_edge = root_vert.link_edges[0]
 
+            inf_block = 1
             while(True):
                 for v in current_edge.verts:
                     if v != current_vert:
@@ -232,7 +239,11 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                         break
                 if prev_e == current_edge:
                     break
-            
+                inf_block += 1
+                if inf_block == context.scene.hn_props.max_keys:
+                    self.report({'WARNING'}, ''.join(['Fiber ', proxy.name, ' hit max key amount. Discarding fiber. --- continuing']))
+                    return
+
             self.hair_guides.append(guide)
     
     #endregion
@@ -240,14 +251,17 @@ class HAIRNET_OT_operator (bpy.types.Operator):
     #region Curves
     
     def process_curves(self, context):
+
         new_fibers = []
+
         for curve in self.curve_list:
             # Conversion code from https://blender.stackexchange.com/questions/265215/how-can-i-convert-a-curve-to-a-mesh-object
-            fiber = curve.to_mesh()
-            new_fiber = bpy.data.objects.new(curve.name + "Mesh", fiber.copy())
+            new_fiber = bpy.data.objects.new(curve.name + "Mesh", curve.to_mesh())
             new_fiber.matrix_world = curve.matrix_world
             bpy.context.collection.objects.link(new_fiber)
             new_fibers.append(new_fiber)
+
+        print('curve')
 
         self.process_fibermesh(context, new_fibers)
         
@@ -255,38 +269,33 @@ class HAIRNET_OT_operator (bpy.types.Operator):
 
         for obj in new_fibers:
             obj.select_set(True)
-        bpy.ops.object.delete()    
+        bpy.ops.object.delete() 
+
+    #endregion
+
+    #region Sheet Mesh
 
     def process_sheets(self, context):
-
-        new_fibers = []
+        '''Turns sheet mesh into vert coords for new particle hair'''
 
         for proxy in self.sheet_list:
 
             proxy_bm = bmesh.new()
             proxy_bm.from_mesh(proxy.data)
 
-            loop_edges = self.get_seams(proxy, proxy_bm)
+            bm_loops = self.get_seams(proxy_bm)            
 
-            if len(loop_edges) == 0:
+            if len(bm_loops) == 0:
                     self.report({'WARNING'}, ''.join(['No valid seams found on ', proxy.name, ' and therefore excluded --- continuing']))
 
-            new_fibers = self.fibers_from_sheet_mesh(proxy, proxy_bm, loop_edges, new_fibers)
+            self.fibers_from_sheet_mesh(context, proxy, bm_loops)
 
-        self.process_fibermesh(context, new_fibers)
+            proxy_bm.free()
 
-        bpy.ops.object.select_all(action='DESELECT')
-
-        for obj in new_fibers:
-            obj.select_set(True)
-        bpy.ops.object.delete()
-
-        return
-
-    def get_seams(self, proxy, proxy_bm):
+    def get_seams(self, proxy_bm):
+        '''Gets the loops attached to the edges perpendicular to marked seams'''
 
         seam_verts = []
-        loop_edges = []
         
         for edge in proxy_bm.edges:
             if edge.seam == True:
@@ -294,117 +303,92 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                     if vert not in seam_verts:
                         seam_verts.append(vert)
 
-        for vert in seam_verts:
-            for edge in vert.link_edges:
-                if edge.seam == False:
-                    loop_edges.append(edge)
-
-        return loop_edges
-    
-    def get_edge_loops(self, proxy, proxy_bm):
-
-        seam_verts = []
-        loop_edges = []
-        
-        for edge in proxy_bm.edges:
-            if edge.seam == True:
-                for vert in edge.verts:
-                    if vert not in seam_verts:
-                        seam_verts.append(vert)
+        bm_loops = []
 
         for vert in seam_verts:
             for edge in vert.link_edges:
                 if edge.seam == False:
-                    loop_edges.append(edge)
+                    bm_loops.append(edge.link_loops[0])
 
-        return loop_edges
+        return bm_loops
     
-    def fibers_from_sheet_mesh(self, proxy, proxy_bm, loop_edges, new_fibers):
-
-        for edge in loop_edges:            
-            # from here https://blender.stackexchange.com/questions/105222/how-do-you-select-an-edge-loop-with-bmesh
-            for loop in edge.link_loops:
-
-                new_edges = []
-                new_verts = []
-
-                if len(loop.vert.link_edges) == 4:
-
-                    new_edges.append(edge)
-                    for vert in edge.verts:
-                        new_verts.append(vert)
-                    
-                    while len(loop.vert.link_edges) == 4:
-                        # jump between BMLoops to the next BMLoop we need
-                        loop = loop.link_loop_prev.link_loop_radial_prev.link_loop_prev
-
-                        # add new components to lists
-                        new_verts.append(loop.link_loop_prev)
-                        new_edges.append(loop.edge)
-                
-                #CREATE NEW MESH AND ADD TO LIST
-                #bm_loop = bmesh.new()
-                #bm_loop = bmesh.ops.duplicate(proxy_bm, geom=new_loop, use_select_history=True)
-                #new_fibermesh = bm_loop.to_mesh()
-                #new_fiber_object = bpy.data.objects.new(proxy.name + "Sheet_Fiber", new_fibermesh)
-                #new_fiber_object.matrix_world = proxy.matrix_world
-                #bpy.context.collection.objects.link(new_fiber_object)
-                #new_fibers.append(new_fiber_object)
-
-
-
-                # CREATES A NEW MESH AND ADDS COMPONENTS
-                bm = bmesh.new()
-
-                add_vert = bm.verts.new
-                add_edge = bm.edges.new
-
-                offset = len(bm.verts)
-
-                for v in proxy_bm.verts:
-                    add_vert(v.co)
-
-                bm.verts.index_update()
-                bm.verts.ensure_lookup_table()
-
-                if proxy_bm.edges:
-                    for edge in proxy_bm.edges:
-                        edge_seq = tuple(bm.verts[i.index+offset] for i in edge.verts)
-                        try:
-                            add_edge(edge_seq)
-                        except ValueError:
-                            # edge exists!
-                            pass
-                    bm.edges.index_update()
-
-                print(bm)
-                new_fibermesh = bm.to_mesh()
-                new_fiber_object = bpy.data.objects.new(proxy.name + "Sheet_Fiber", new_fibermesh)
-                new_fiber_object.matrix_world = proxy.matrix_world
-                bpy.context.collection.objects.link(new_fiber_object)
-                new_fibers.append(new_fiber_object)
+    def fibers_from_sheet_mesh(self, context, proxy, loops):
+        '''Retrieves vert coordinates of an edge loop from an input edge'''
         
-        return new_fibers
-    
-    def get_object_center(self, object):
-        # from https://blender.stackexchange.com/questions/62040/get-center-of-geometry-of-an-object
-        x, y, z = [ sum( [v.co[i] for v in object.data.vertices] ) for i in range(3)]
+        for loop in loops:
+            # I don't think there's a way to anonymize backward and forward walking :(            
+            if loop.link_loop_prev.link_loop_radial_prev.link_loop_prev.edge.seam == True or loop.link_loop_prev.edge.seam == True:
+                if loop.link_loop_next.edge.seam == True or loop.link_loop_next.link_loop_radial_next.link_loop_next.edge.seam == True:
+                    continue
+                self.forward_edge_walk(context, proxy, loop)
+                continue
 
-        count = float(len(object.data.vertices))
+            self.backward_edge_walk(context, proxy, loop)
 
-        return object.matrix_world @ (Vector( (x, y, z ) ) / count )
+    def backward_edge_walk(self, context, proxy, loop):
+
+        vert_comparison = len(loop.vert.link_edges)
+
+        if vert_comparison > 4: 
+            vert_comparison == 4
+
+        guide = []
+
+        guide.append(loop.link_loop_next.vert.co)
+        guide.append(loop.vert.co)
+        
+        inf_block = 2
+        while loop.link_loop_prev != loop.link_loop_prev.link_loop_radial_prev and len(loop.vert.link_edges) >= vert_comparison:
+            
+            loop = loop.link_loop_prev.link_loop_radial_prev.link_loop_prev
+
+            guide.append(loop.vert.co)
+
+            inf_block +=1
+            if inf_block == context.scene.hn_props.max_keys:
+                self.report({'WARNING'}, ''.join(['Fiber on ', proxy.name, ' sheet hit max key amount. Discarding fiber. --- continuing']))
+                return
+        
+        if guide:
+            self.hair_guides.append(guide)
+
+    def forward_edge_walk(self, context, proxy, loop):
+        
+        vert_comparison = len(loop.link_loop_next.vert.link_edges)
+
+        if vert_comparison > 4: 
+            vert_comparison = 4
+        
+        guide = []
+
+        guide.append(loop.vert.co)
+        guide.append(loop.link_loop_next.vert.co)
+
+        inf_block = 2
+        while loop.link_loop_next != loop.link_loop_next.link_loop_radial_next and len(loop.link_loop_next.vert.link_edges) >= vert_comparison:
+            
+            loop = loop.link_loop_next.link_loop_radial_next.link_loop_next
+
+            guide.append(loop.link_loop_next.vert.co)
+            
+            inf_block +=1
+            if inf_block == context.scene.hn_props.max_keys:
+                self.report({'WARNING'}, ''.join(['Fiber on ', proxy.name, ' sheet hit max key amount. Discarding fiber. --- continuing']))
+                return
+        
+        if guide:
+            self.hair_guides.append(guide)
+
+    #endregion
 
     #endregion
 
     #region Building Particle Hair
 
     def create_particle_hair(self, context):
-        '''Creates the hair using the indexed vertices from the proxy objects'''
+        '''Creates the new hair using the indexed vertex coordinates from the proxy objects'''
 
-        bpy.context.view_layer.objects.active = data.hair_source
         cd, cv, x, y = self.particle_creation_setup(context)
-
-        bpy.ops.object.mode_set(mode = 'PARTICLE_EDIT')
 #
         # PARTICLE TOOL SETTINGS
         bpy.ops.wm.tool_set_by_id(name="builtin_brush.Add")
@@ -416,20 +400,27 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         ps_name = data.hair_source.particle_systems.active.name
         ps = data.hair_source.particle_systems.active
 
-        # getting the current particles is important when adding to an existing system
         current_particles = len(data.hair_source.particle_systems.active.particles)
+        
 
         for i in range(0,len(self.hair_guides)):
 
             guide = self.hair_guides[i]
             bpy.context.scene.tool_settings.particle_edit.default_key_count = len(guide)
 
+            particle_amount = len(ps.particles)
+
             # From what I can work out there are 3 requirements for brush edit to complete successfully. 
             # 1. The space must be view3d. 
             # 2. A particle brush must be active. 
-            # 3. The particle system must be a hair system (not an emitter).
+            # 3. The particle system must be a hair system (not an emitter (and only when using the add brush)).
             bpy.ops.particle.brush_edit(stroke=[{"name":"", "location":(0, 0, 0), "mouse":(x, y), "mouse_event":(0, 0), "pressure":0, "size":0, "x_tilt":0, "y_tilt":0, "time":0, "is_start":False}], pen_flip=False)  
 
+            if particle_amount == len(ps.particles):
+                self.report({'ERROR'}, ['Unable to create particle. See troubleshooting "framing selected" for help. --- Cancelling'])
+                return
+            
+            # I don't understand fully how this works, but it seems like the dependency graph has to be updated in order for the loop to keep up with the current # and location of particles
             depsgraph = bpy.context.evaluated_depsgraph_get()
             depObj = data.hair_source.evaluated_get(depsgraph)
             ps = depObj.particle_systems[ps_name]
@@ -440,22 +431,24 @@ class HAIRNET_OT_operator (bpy.types.Operator):
             for j in range(0, len(guide)):
                 h = new_particle.hair_keys[j]
                 h.co = guide[j]
-                print(guide[j], new_particle.hair_keys[j].co)
-        # THIS IS NEEDED TO MAKE THE CHANGES TO PARTICLES STICK. I don't know why, and I don't ask questions of the machine guides who rule us
-        bpy.ops.particle.brush_edit(stroke=[{"name":"", "location":(0, 0, 0), "mouse":(0,0), "mouse_event":(0, 0), "pressure":0, "size":0, "x_tilt":0, "y_tilt":0, "time":0, "is_start":False}], pen_flip=False)
+                
+        # THIS IS NEEDED TO MAKE THE KEY CHANGES TO THE LAST PARTICLE STICK. I don't know why, and I don't ask questions of the machine gods who rule us
+        bpy.ops.particle.brush_edit(stroke=[{"name":"", "location":(0, 0, 0), "mouse":(-10000,-10000), "mouse_event":(0, 0), "pressure":0, "size":0, "x_tilt":0, "y_tilt":0, "time":0, "is_start":False}], pen_flip=False)
 
         self.particle_creation_cleanup(context, cd, cv)
 
         return
     
     def particle_creation_setup(self, context):
-        '''Handles camera and screen for particle creation'''
+        '''Handles camera, screen, and mode for particle creation'''
         cam_view = context.region_data.view_matrix
         cam_dist = context.region_data.view_distance
 
         # Setup camera and object for creating brush edit
+        bpy.context.view_layer.objects.active = data.hair_source
         self.frame_objects()
         x, y = self.get_center_of_3d_view()
+        bpy.ops.object.mode_set(mode = 'PARTICLE_EDIT')
 
         return cam_dist, cam_view, x, y
     
@@ -466,6 +459,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         bpy.ops.view3d.view_selected()
     
     def get_center_of_3d_view(self):
+        '''Gets the center of the 3d view area'''
         return bpy.context.area.width / 2, bpy.context.area.height / 2
     
     def particle_creation_cleanup(self, context, cam_dist, cam_view):
@@ -474,7 +468,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         bpy.ops.object.select_all(action='DESELECT')
         if context.scene.hn_props.hide_proxies == True:
             self.hide_proxy_hair()
-        # unfortunately whenever you use particle brush edit it becomes impossible (afaik) to reset the camera. I have no idea why, but I'm leaving this camera reset in the code in case this changes in the future
+        # unfortunately whenever you use particle brush edit it becomes impossible (afaik) to reset the camera. I have no idea why, but I'm leaving this camera reset in the code in case this changes in the future (and so that people are aware of the issue)
         context.region_data.view_distance = cam_dist
         context.region_data.view_matrix = cam_view
 

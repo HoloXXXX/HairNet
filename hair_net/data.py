@@ -38,8 +38,16 @@ class HairNetProperties(PropertyGroup):
     
     root_select_mode: BoolProperty(
         name='Root Select Mode',
-        description='This is a tool to fix reversed roots. When checked, selected vertices on hairs will be prioritized for determining roots.',
+        description='This is a tool to fix reversed roots. When checked, selected vertices on hairs will be prioritized for determining roots. Seams on sheet mesh override this.',
         default=False)
+    
+    max_keys: IntProperty(
+        name='Max Hair Keys',
+        description='This prevents the tool from getting stuck in an endless iteration. Set this value to a little above what you would expec the maximum number of keys to be for any given particle',
+        default=100,
+        min=2,
+        options = set()
+        )
     
     info: StringProperty(
         name='Hair Net Info',

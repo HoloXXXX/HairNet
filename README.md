@@ -38,11 +38,32 @@ Mention frame selected
 
 Will leave a lot of extra meshes in your scene, may want to cleanup after
 
+Troubleshooting "the particles don't look right" - increase strand steps in viewport
+
+TODO: REMOVE STRAND STEPS VIEWPORT VARIABLE SET
+
+Check if the emitter has faces
+
+CODE ASSUMES NOTHING IS HIDDEN
+
+Change intitial sort of meshes
+
+inf block on fibers and let user change
+
 TODO object offset
 
+"Why do my particles look weird?" - increase the viewport resolution of the particles
+
+Selection override and root object doesn't apply to sheet mesh
+
+Root select doesn't apply to curves
+
 One curve per object
+
+Make verts ignore difference in object spaces
 
 PLACES TO IMPROVE:
 Break the steps up into a configuration step, that ends directly after the initial report, and an execution step. This would allow people who have very complicated hair guides to see if their hair will finish the way they want it to before they sink the time.
 Multiply the vertex coords by the offset between the objects so the same transform isn't required
 Rewrite so meshes aren't left over in scene
+Apply root select to curves
