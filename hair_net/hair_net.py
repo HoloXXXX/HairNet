@@ -420,7 +420,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                 depObj = data.hair_source.evaluated_get(depsgraph)
                 ps = depObj.particle_systems.active
 
-                ps.particles[-1].co = guide[j]
+                ps.particles[-1].hair_keys[j].co = guide[j]
                 
         # THIS IS NEEDED TO MAKE THE KEY CHANGES TO THE LAST PARTICLE STICK. I don't know why, and I don't ask questions of the machine gods who rule us
         bpy.ops.particle.brush_edit(stroke=[{"name":"", "location":(0, 0, 0), "mouse":(-10000,-10000), "mouse_event":(0, 0), "pressure":0, "size":0, "x_tilt":0, "y_tilt":0, "time":0, "is_start":False}], pen_flip=False)
