@@ -8,12 +8,7 @@
 # NB 2) All meshes must have the same number of vertices in the direction that corresponds to hair growth
 #---------------------------------------------------
 # Rewritten by Holo in June, 2026
-# All proxy hair objects can now have a variable number of vertices (see readme for details)
-# I'm writing this instead of finishing this damn plugin :P
-#
-#
-#
-#
+# See README for details
 #---------------------------------------------------
 
 import bpy
@@ -21,7 +16,6 @@ import bmesh
 from mathutils import Vector
 
 from . import data
-
 
 class HAIRNET_OT_operator (bpy.types.Operator):
     bl_idname = 'hairnet.operator'
@@ -193,7 +187,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                     end_verts.append(current_vert)
 
             if len(end_verts) == 0:
-                self.report({'WARNING'}, ''.join(['Fibermesh ', proxy.name, ' has no end verts and therefore excluded --- continuing']))
+                self.report({'WARNING'}, ''.join(['Object ', proxy.name, ' has no end verts and therefore excluded --- continuing']))
                 continue
                             
             root_vert = self.decide_root(context, end_verts)
@@ -232,17 +226,20 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                         guide.append(v.co)
                         current_vert = v
                         break
-                prev_e = current_edge
+                prev_edge = current_edge
                 for e in current_vert.link_edges:
                     if e != current_edge:
                         current_edge = e
                         break
-                if prev_e == current_edge:
+                if prev_edge == current_edge:
                     break
                 inf_block += 1
                 if inf_block == context.scene.hn_props.max_keys:
                     self.report({'WARNING'}, ''.join(['Fiber ', proxy.name, ' hit max key amount. Discarding fiber. --- continuing']))
                     return
+                
+            for vert in guide:
+                print(vert)
 
             self.hair_guides.append(guide)
     
@@ -256,12 +253,11 @@ class HAIRNET_OT_operator (bpy.types.Operator):
 
         for curve in self.curve_list:
             # Conversion code from https://blender.stackexchange.com/questions/265215/how-can-i-convert-a-curve-to-a-mesh-object
-            new_fiber = bpy.data.objects.new(curve.name + "Mesh", curve.to_mesh())
+            fiber = curve.to_mesh()
+            new_fiber = bpy.data.objects.new(curve.name + "Mesh", fiber.copy())
             new_fiber.matrix_world = curve.matrix_world
             bpy.context.collection.objects.link(new_fiber)
             new_fibers.append(new_fiber)
-
-        print('curve')
 
         self.process_fibermesh(context, new_fibers)
         
@@ -269,7 +265,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
 
         for obj in new_fibers:
             obj.select_set(True)
-        bpy.ops.object.delete() 
+        bpy.ops.object.delete()
 
     #endregion
 
@@ -402,33 +398,47 @@ class HAIRNET_OT_operator (bpy.types.Operator):
 
         current_particles = len(data.hair_source.particle_systems.active.particles)
         
+        bpy.types.RenderSettings.use_lock_interface
 
         for i in range(0,len(self.hair_guides)):
 
             guide = self.hair_guides[i]
             bpy.context.scene.tool_settings.particle_edit.default_key_count = len(guide)
-
             particle_amount = len(ps.particles)
+
+            depsgraph = bpy.context.evaluated_depsgraph_get()
+            depObj = data.hair_source.evaluated_get(depsgraph)
+            ps = depObj.particle_systems[ps_name]
 
             # From what I can work out there are 3 requirements for brush edit to complete successfully. 
             # 1. The space must be view3d. 
             # 2. A particle brush must be active. 
             # 3. The particle system must be a hair system (not an emitter (and only when using the add brush)).
             bpy.ops.particle.brush_edit(stroke=[{"name":"", "location":(0, 0, 0), "mouse":(x, y), "mouse_event":(0, 0), "pressure":0, "size":0, "x_tilt":0, "y_tilt":0, "time":0, "is_start":False}], pen_flip=False)  
-
-            if particle_amount == len(ps.particles):
-                self.report({'ERROR'}, ['Unable to create particle. See troubleshooting "framing selected" for help. --- Cancelling'])
-                return
             
             # I don't understand fully how this works, but it seems like the dependency graph has to be updated in order for the loop to keep up with the current # and location of particles
             depsgraph = bpy.context.evaluated_depsgraph_get()
             depObj = data.hair_source.evaluated_get(depsgraph)
             ps = depObj.particle_systems[ps_name]
 
+            print(str(particle_amount))
+            print(str(len(ps.particles)))
+
+            if particle_amount == len(ps.particles):
+                self.report({'ERROR'}, 'Unable to create particle. See troubleshooting "framing selected" for help. --- Cancelling')
+                return
+
             new_particle = ps.particles[current_particles + i]
             new_particle.location = guide[0]
 
+            depsgraph = bpy.context.evaluated_depsgraph_get()
+            depObj = data.hair_source.evaluated_get(depsgraph)
+            ps = depObj.particle_systems[ps_name]
+
             for j in range(0, len(guide)):
+                depsgraph = bpy.context.evaluated_depsgraph_get()
+                depObj = data.hair_source.evaluated_get(depsgraph)
+                ps = depObj.particle_systems[ps_name]
                 h = new_particle.hair_keys[j]
                 h.co = guide[j]
                 
