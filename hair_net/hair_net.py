@@ -115,12 +115,14 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         '''Sorts the input proxy hair guides. Returns fibermesh, curves, sheet mesh, beveled curves, and "other" type lists'''
         for proxy in data.proxy_hair_guides:
             match proxy.type:
-                case 'CURVE':
+                case "CURVES":
+                        self.curve_list.append(proxy)    
+                case "CURVE":
                     if (proxy.data.bevel_depth > 0.0):
                         self.beveled_curve_list.append(proxy)
                     else:
                         self.curve_list.append(proxy)
-                case 'MESH':
+                case "MESH":
                     if self.fiber_or_sheet(proxy.data):
                         self.fibermesh_list.append(proxy)
                     else:
@@ -248,11 +250,15 @@ class HAIRNET_OT_operator (bpy.types.Operator):
     def process_curves(self, context):
 
         new_fibers = []
+        converted_mesh = []
 
+        bpy.ops.object.select_all(action='DESELECT')
         for curve in self.curve_list:
             # Conversion code from https://blender.stackexchange.com/questions/265215/how-can-i-convert-a-curve-to-a-mesh-object
-            fiber = curve.to_mesh()
-            new_fiber = bpy.data.objects.new(curve.name + "Mesh", fiber.copy())
+            mesh = bpy.data.meshes.new_from_object(curve)
+            converted_mesh.append(mesh)
+
+            new_fiber = bpy.data.objects.new(curve.name + "Mesh", mesh)
             new_fiber.matrix_world = curve.matrix_world
             bpy.context.collection.objects.link(new_fiber)
             new_fibers.append(new_fiber)
@@ -264,6 +270,9 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         for obj in new_fibers:
             obj.select_set(True)
         bpy.ops.object.delete()
+
+        for mesh in converted_mesh:
+            bpy.data.meshes.remove(mesh)
 
     #endregion
 
