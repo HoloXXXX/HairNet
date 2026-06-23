@@ -8,6 +8,7 @@
 # NB 2) All meshes must have the same number of vertices in the direction that corresponds to hair growth
 #---------------------------------------------------
 # Rewritten by Holo in June, 2026
+# Unbent unbroken
 # See README for details
 #---------------------------------------------------
 
@@ -39,10 +40,11 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         self.hair_guides = []
 
         # SETUP
-        if self.set_particle_system(context) == False: return {'CANCELLED'}
+        if self.init_check(): return {'CANCELLED'}
+        if self.set_particle_system(context): return {'CANCELLED'}
         self.set_hair_root_object(context)
         self.sort_proxies(context)
-        if self.initial_user_report(context) == False: return {'CANCELLED'}
+        self.initial_user_report(context)
 
         # PROCESSING PROXIES INTO GUIDES
         self.process_fibermesh(context, self.fibermesh_list)
@@ -56,6 +58,12 @@ class HAIRNET_OT_operator (bpy.types.Operator):
     
     #region Setup
 
+    def init_check(self):
+        if len(data.proxy_hair_guides) == 0:
+            self.report({'ERROR_INVALID_INPUT'}, 'Please select at least one valid hair proxy object.')
+            return True
+        return False
+
     def set_particle_system(self,context):
         '''Handles all of the logic for which particle system should be used'''
         if context.scene.hn_props.add_to_existing:
@@ -64,7 +72,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         bpy.ops.object.particle_system_add()     
         self.set_particle_system_settings(context)
 
-        return True
+        return False
     
     def set_hair_root_object(self, context):
         '''Sets what object will be used when determing which vert of a fiber or curve to set as the root.'''
@@ -84,11 +92,11 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         '''Handles error checking for adding to an existing particle system'''
         if data.hair_source.particle_systems.active == None:
             self.report({'ERROR_INVALID_INPUT'}, 'You need to have an active particle system on the object to add to an existing hair system.')
-            return False
+            return True
         if data.hair_source.particle_systems.active.settings.type == 'EMITTER':
             self.report({'ERROR_INVALID_INPUT'}, 'The active particle system must be a hair system.')
-            return False
-        return True
+            return True
+        return False
 
     def set_particle_system_settings(self, context):
         '''Sets the particle settings for a new particle system'''
@@ -106,7 +114,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
     def sort_proxies(self, context):
         '''Sorts the input proxy hair guides. Returns fibermesh, curves, sheet mesh, beveled curves, and "other" type lists'''
         for proxy in data.proxy_hair_guides:
-            match proxy.data.id_type:
+            match proxy.type:
                 case 'CURVE':
                     if (proxy.data.bevel_depth > 0.0):
                         self.beveled_curve_list.append(proxy)
@@ -128,8 +136,6 @@ class HAIRNET_OT_operator (bpy.types.Operator):
     
     def initial_user_report(self, context):
         '''Reports to the user in the info box. Names the hair system that will be used, then lists the proxy objects by type, and finally outputs warnings for invalid objects.'''
-
-        _continue = True
 
         if context.scene.hn_props.add_to_existing == True:
             ps_report = ''.join(['Using existing particle system ', data.hair_source.particle_systems.active.name])
@@ -154,19 +160,13 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         for proxy in self.sheet_list:
             proxies.append(''.join([' --- ', proxy.name]))
 
-        if len(proxies) == 3:
-            self.report({'WARNING'}, 'Please select at least one valid proxy object.')
-            _continue = False
-        else:       
-            self.report({'INFO'}, ''.join(['Building particle hair with "', data.hair_source.name, '" as the hair source and the following as the hair guides:\n', '\n'.join(proxies)]))
+        self.report({'INFO'}, ''.join(['Building particle hair with "', data.hair_source.name, '" as the hair source and the following as the hair guides:\n', '\n'.join(proxies)]))
 
         for proxy in self.beveled_curve_list:
             self.report({'WARNING'}, ''.join(['Curve ', proxy.name, ' is beveled and therefore excluded --- continuing']))
 
         for proxy in self.other_type_list:
             self.report({'WARNING'}, ''.join(['Object ', proxy.name, ' is invalid type ', proxy.type, ' --- continuing']))
-
-        return _continue
     
     #endregion
 
@@ -191,7 +191,9 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                 continue
                             
             root_vert = self.decide_root(context, end_verts)
-            self.fibers_to_vert_co(context, proxy, root_vert)
+            guide = self.fibers_to_vert_co(context, proxy, root_vert)
+            guide = self.co_space_conversion(proxy, guide)
+            self.hair_guides.append(guide)
 
             proxy_bm.free()
 
@@ -237,8 +239,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                 if inf_block == context.scene.hn_props.max_keys:
                     self.report({'WARNING'}, ''.join(['Fiber ', proxy.name, ' hit max key amount. Discarding fiber. --- continuing']))
                     return
-
-            self.hair_guides.append(guide)
+            return guide
     
     #endregion
 
@@ -313,10 +314,13 @@ class HAIRNET_OT_operator (bpy.types.Operator):
             if loop.link_loop_prev.link_loop_radial_prev.link_loop_prev.edge.seam == True or loop.link_loop_prev.edge.seam == True:
                 if loop.link_loop_next.edge.seam == True or loop.link_loop_next.link_loop_radial_next.link_loop_next.edge.seam == True:
                     continue
-                self.forward_edge_walk(context, proxy, loop)
-                continue
+                guide = self.forward_edge_walk(context, proxy, loop)
+            else:
+                guide = self.backward_edge_walk(context, proxy, loop)
 
-            self.backward_edge_walk(context, proxy, loop)
+            guide = self.co_space_conversion(proxy, guide)
+            self.hair_guides.append(guide)
+
 
     def backward_edge_walk(self, context, proxy, loop):
 
@@ -341,9 +345,8 @@ class HAIRNET_OT_operator (bpy.types.Operator):
             if inf_block == context.scene.hn_props.max_keys:
                 self.report({'WARNING'}, ''.join(['Fiber on ', proxy.name, ' sheet hit max key amount. Discarding fiber. --- continuing']))
                 return
-        
-        if guide:
-            self.hair_guides.append(guide)
+            
+        return guide
 
     def forward_edge_walk(self, context, proxy, loop):
         
@@ -369,68 +372,27 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                 self.report({'WARNING'}, ''.join(['Fiber on ', proxy.name, ' sheet hit max key amount. Discarding fiber. --- continuing']))
                 return
         
-        if guide:
-            self.hair_guides.append(guide)
+        return guide
+
+    def co_space_conversion(self, proxy, guide):
+        '''Converts the vertex coordinates into the space of the hair source mesh'''
+        converted_guide = []
+        proxy_mat = proxy.matrix_world
+        for co in guide:
+            world_co = proxy_mat @ co
+            obj_co = data.hair_source.matrix_world.inverted() @ world_co
+            converted_guide.append(obj_co)
+
+        return converted_guide
 
     #endregion
 
     #endregion
 
     #region Building Particle Hair
-
-    def create_particle_hair(self, context):
-        '''Creates the new hair using the indexed vertex coordinates from the proxy objects'''
-
-        cd, cv, x, y = self.particle_creation_setup(context)
-#
-        # PARTICLE TOOL SETTINGS
-        bpy.ops.wm.tool_set_by_id(name="builtin_brush.Add")
-        bpy.context.scene.tool_settings.particle_edit.brush.count = 1
-        bpy.context.scene.tool_settings.particle_edit.use_emitter_deflect = False
-        bpy.context.scene.tool_settings.particle_edit.use_preserve_root =  False
-        bpy.context.scene.tool_settings.particle_edit.use_preserve_length = False
-
-        ps = data.hair_source.particle_systems.active
-
-        for i in range(0,len(self.hair_guides)):
-
-            guide = self.hair_guides[i]
-            bpy.context.scene.tool_settings.particle_edit.default_key_count = len(guide)
-
-            depsgraph = bpy.context.evaluated_depsgraph_get()
-            depObj = data.hair_source.evaluated_get(depsgraph)
-            ps = depObj.particle_systems.active
-
-            # From what I can work out there are 3 requirements for brush edit to complete successfully. 
-            # 1. The space must be view3d. 
-            # 2. A particle brush must be active. 
-            # 3. The particle system must be a hair system (not an emitter (and only when using the add brush)).
-            bpy.ops.particle.brush_edit(stroke=[{"name":"", "location":(0, 0, 0), "mouse":(x, y), "mouse_event":(0, 0), "pressure":0, "size":0, "x_tilt":0, "y_tilt":0, "time":0, "is_start":False}], pen_flip=False)  
-            
-            # I don't understand fully how this works, but it seems like the dependency graph has to be updated in order for the loop to keep up with the current # and location of particles
-            depsgraph = bpy.context.evaluated_depsgraph_get()
-            depObj = data.hair_source.evaluated_get(depsgraph)
-            ps = depObj.particle_systems.active
-
-            new_particle = ps.particles[-1]
-            new_particle.location = guide[0]
-
-            for j in range(0, len(guide)):
-                depsgraph = bpy.context.evaluated_depsgraph_get()
-                depObj = data.hair_source.evaluated_get(depsgraph)
-                ps = depObj.particle_systems.active
-
-                ps.particles[-1].hair_keys[j].co = guide[j]
-                
-        # THIS IS NEEDED TO MAKE THE KEY CHANGES TO THE LAST PARTICLE STICK. I don't know why, and I don't ask questions of the machine gods who rule us
-        bpy.ops.particle.brush_edit(stroke=[{"name":"", "location":(0, 0, 0), "mouse":(-10000,-10000), "mouse_event":(0, 0), "pressure":0, "size":0, "x_tilt":0, "y_tilt":0, "time":0, "is_start":False}], pen_flip=False)
-
-        self.particle_creation_cleanup(context, cd, cv)
-
-        return
     
     def particle_creation_setup(self, context):
-        '''Handles camera, screen, and mode for particle creation'''
+        '''Handles camera, screen, mode, and particle settings for particle creation'''
         cam_view = context.region_data.view_matrix
         cam_dist = context.region_data.view_distance
 
@@ -439,6 +401,12 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         self.frame_objects()
         x, y = self.get_center_of_3d_view()
         bpy.ops.object.mode_set(mode = 'PARTICLE_EDIT')
+
+        bpy.ops.wm.tool_set_by_id(name="builtin_brush.Add")
+        bpy.context.scene.tool_settings.particle_edit.brush.count = 1
+        bpy.context.scene.tool_settings.particle_edit.use_emitter_deflect = False
+        bpy.context.scene.tool_settings.particle_edit.use_preserve_root =  False
+        bpy.context.scene.tool_settings.particle_edit.use_preserve_length = False
 
         return cam_dist, cam_view, x, y
     
@@ -451,6 +419,46 @@ class HAIRNET_OT_operator (bpy.types.Operator):
     def get_center_of_3d_view(self):
         '''Gets the center of the 3d view area'''
         return bpy.context.area.width / 2, bpy.context.area.height / 2
+
+    def create_particle_hair(self, context):
+        '''Creates the new hair using the vertex coordinates from the proxy objects'''
+
+        cd, cv, x, y = self.particle_creation_setup(context)
+
+        for i in range(0,len(self.hair_guides)):
+
+            guide = self.hair_guides[i]
+            bpy.context.scene.tool_settings.particle_edit.default_key_count = len(guide)
+
+            ps = self.evaluate_dependency_graph(context)
+
+            # From what I can work out there are 3 requirements for brush edit to complete successfully. 
+            # 1. The space must be view3d. 
+            # 2. A particle brush must be active. 
+            # 3. The particle system must be a hair system (not an emitter (and only when using the add brush)).
+            bpy.ops.particle.brush_edit(stroke=[{"name":"", "location":(0, 0, 0), "mouse":(x, y), "mouse_event":(0, 0), "pressure":0, "size":0, "x_tilt":0, "y_tilt":0, "time":0, "is_start":False}], pen_flip=False)  
+
+            ps = self.evaluate_dependency_graph(context)
+
+            new_particle = ps.particles[-1]
+            new_particle.location = guide[0]
+
+            for j in range(0, len(guide)):
+                ps = self.evaluate_dependency_graph(context)
+                ps.particles[-1].hair_keys[j].co = guide[j]
+                
+        # THIS IS NEEDED TO MAKE THE KEY CHANGES TO THE LAST PARTICLE STICK. I don't know why, and I don't ask questions of the machine gods who rule us
+        bpy.ops.particle.brush_edit(stroke=[{"name":"", "location":(0, 0, 0), "mouse":(-10000,-10000), "mouse_event":(0, 0), "pressure":0, "size":0, "x_tilt":0, "y_tilt":0, "time":0, "is_start":False}], pen_flip=False)
+
+        self.particle_creation_cleanup(context, cd, cv)
+
+        return
+    
+    def evaluate_dependency_graph(self, context):
+        '''Grabs the most recent data from the scene to evaluate'''
+        depsgraph = bpy.context.evaluated_depsgraph_get()
+        depObj = data.hair_source.evaluated_get(depsgraph)
+        return depObj.particle_systems.active
     
     def particle_creation_cleanup(self, context, cam_dist, cam_view):
         '''sets back to object mode, clears selection, hides proxies if applicable, and resets camera view'''
