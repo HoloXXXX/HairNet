@@ -45,10 +45,6 @@ class HAIRNET_PT_view_panel(bpy.types.Panel):
             row = box.row()
             row.prop_search(data.scene.hn_props, 'particle_settings',  bpy.data, 'particles', text='')
 
-        # HIDE PROXIES
-        row = layout.row()
-        row.prop(data.scene.hn_props, 'hide_proxies')        
-
 class HAIRNET_PT_advanced_panel(bpy.types.Panel):
     bl_label = 'Advanced Features'
     bl_idname = 'HAIRNET_PT_advanced_panel'
@@ -60,25 +56,47 @@ class HAIRNET_PT_advanced_panel(bpy.types.Panel):
     bl_options = {"DEFAULT_CLOSED"}
 
     def draw(self, context):
-        layout = self.layout
-        
-        # CURVE RESOLUTION
-        col = layout.column()
-        sub = col.column()
-        sub.prop(data.scene.hn_props, 'curve_resolution')
+        layout = self.layout        
+
+        # GENERAL BOX
+        box = layout.box()
+        split = box.split(factor=0.3)
+        col = split.column()
+        col.label(text='General Settings:')
+
+        # CONFIG MODE
+        col = split.column()
+        col.prop(data.scene.hn_props, 'configuration_mode')
+
+        # HIDE PROXIES
+        col.prop(data.scene.hn_props, 'hide_proxies')        
 
         # MAX KEYS
-        col = layout.column()
-        sub = col.column()
-        sub.prop(data.scene.hn_props, 'max_keys')
+        col.prop(data.scene.hn_props, 'max_keys')
+
+        # ROOT BOX
+        box = layout.box()
+        split = box.split(factor=0.3)
+        col = split.column()
+        col.label(text='Root Settings:')
 
         # ROOT SELECT MODE
-        row = layout.row()
-        row.prop(data.scene.hn_props, 'root_select_mode')
+        col = split.column()
+        col.prop(data.scene.hn_props, 'root_select_mode')
 
         # ROOT LOCATOR
-        row = layout.row()
-        row.prop_search(data.scene.hn_props, 'root_locator', bpy.data, 'objects', text='Root Locator')
+        col = col.row()
+        col.prop_search(data.scene.hn_props, 'root_locator', bpy.data, 'objects', text='')
+
+        # CURVE BOX
+        box = layout.box()
+        split = box.split(factor=0.3)
+        col = split.column()
+        col.label(text='Curve Settings:')
+
+        # CURVE RESOLUTION
+        col = split.column()
+        col.prop(data.scene.hn_props, 'curve_resolution')
 
         layout.use_property_split = True
 
