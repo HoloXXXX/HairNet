@@ -62,6 +62,9 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         if len(data.proxy_hair_guides) == 0:
             self.report({'ERROR_INVALID_INPUT'}, 'Please select at least one valid hair proxy object.')
             return True
+        if data.hair_source.data != "MESH":
+            self.report({'ERROR_INVALID_INPUT'}, 'Please ensure the active object is capable of hosting a particle system.')
+            return True
         return False
 
     def set_particle_system(self,context):
@@ -176,22 +179,20 @@ class HAIRNET_OT_operator (bpy.types.Operator):
 
     #region Fibermesh
 
-    def process_fibermesh(self, context, mesh_list):       
+    def process_fibermesh(self, context, mesh_list):
+        '''Turns fibermesh input into vert coordinates for particle hair'''
 
         for proxy in mesh_list:
 
             proxy_bm = bmesh.new()
             proxy_bm.from_mesh(proxy.data)
-            end_verts = []
-            
-            for current_vert in proxy_bm.verts:
-                if len(current_vert.link_edges) == 1:
-                    end_verts.append(current_vert)
+
+            end_verts = self.get_end_verts(proxy_bm)
 
             if len(end_verts) == 0:
                 self.report({'WARNING'}, ''.join(['Object ', proxy.name, ' has no end verts and therefore excluded --- continuing']))
                 continue
-                            
+
             root_vert = self.decide_root(context, end_verts)
             guide = self.fibers_to_vert_co(context, proxy, root_vert)
             guide = self.co_space_conversion(proxy, guide)
@@ -199,16 +200,26 @@ class HAIRNET_OT_operator (bpy.types.Operator):
 
             proxy_bm.free()
 
+    def get_end_verts(self, proxy_bm):
+        '''Return any vert on a fibermesh that has only one edge attached'''
+
+        end_verts = []
+
+        for current_vert in proxy_bm.verts:
+            if len(current_vert.link_edges) == 1:
+                end_verts.append(current_vert)
+
+        return end_verts
+
     def decide_root(self, context, end_verts):
         '''This function takes in verts with only one edge and decides which of these will become the root.'''
-
-        # RETURN BASED ON THE ROOT SELECTION
         if context.scene.hn_props.root_select_mode:
             for vert in end_verts:
                 if vert.select == True:
+                    print('vert selected')
                     return vert
+                print('vert not selected')
 
-        # RETURN BASED ON THE DISTANCE TO DEFINED OBJECT
         closest_vert = end_verts[0]
         for vert in end_verts:
             if vert.co - self.hair_root_loc < closest_vert.co - self.hair_root_loc:
@@ -248,27 +259,73 @@ class HAIRNET_OT_operator (bpy.types.Operator):
     #region Curves
     
     def process_curves(self, context):
+        '''Turns curve input into vert coordinates for particle hair'''
 
-        bpy.ops.object.select_all(action='DESELECT')
+        curve_meshes = []
+
+        # It's less efficient to duplicate and convert the objects in the for loop rather than all at once, but it's necessary for speeding up the comparison of the root select.
         for curve in self.curve_list:
-            # Conversion code from https://blender.stackexchange.com/questions/265215/how-can-i-convert-a-curve-to-a-mesh-object
+            bpy.ops.object.select_all(action='DESELECT')
             curve.select_set(True)
-        
-        bpy.ops.object.duplicate(linked=False)
-        bpy.ops.object.convert(target='MESH', keep_original=False)
-
-        self.process_fibermesh(context, bpy.context.selected_objects)
+            bpy.ops.object.duplicate(linked=False)
+            bpy.ops.object.convert(target='MESH', keep_original=False)
+            curve_meshes.append(bpy.context.selected_objects[0])
+            self.select_curve_mesh_roots(context, curve_meshes)
+            print('curve passed')
+    
+        self.process_fibermesh(context, curve_meshes)
 
         scene_meshes = bpy.data.meshes
-        for curve_mesh in bpy.context.selected_objects:
+        for curve_mesh in curve_meshes:
             scene_meshes.remove(curve_mesh.data, do_unlink=True)
 
+    def select_curve_mesh_roots(self, context, curve_meshes):
+        '''Transfers root selection to new mesh'''
+
+        if not context.scene.hn_props.root_select_mode or \
+            curve_meshes[-1].type == "CURVES":
+            return
+
+        for i in range(0,len(curve_meshes)):
+            selected_point_coords = self.get_selected_org_curve_points(i)
+
+            for s_co in selected_point_coords:
+                self.select_curve_mesh_verts(s_co, curve_meshes[i])
+        
+
+    def get_selected_org_curve_points(self, i):
+        '''Gets the points of the original curve'''
+
+        selected_coords = []
+
+        if self.curve_list[i].data.splines[0].type == "BEZIER":
+            for point in self.curve_list[i].data.splines[0].bezier_points:
+                if point.select_control_point:
+                    selected_coords.append(point.co)
+        else:
+            for point in self.curve_list[i].data.splines[0].points:
+                if point.select:
+                    selected_coords.append(point.co)
+        
+        return selected_coords
+
+    def select_curve_mesh_verts(self, s_co, curve_mesh, rel_tol=1e-09, abs_tol=0.001):
+        '''Select vert if within a tolerance of the selected point on the curve'''
+
+        for vert in curve_mesh.data.vertices:
+            if abs(s_co.x - vert.co.x) < max(rel_tol * max(abs(s_co.x), abs(vert.co.x)), abs_tol) and \
+            (s_co.y - vert.co.y) < max(rel_tol * max(abs(s_co.y), abs(vert.co.y)), abs_tol) and \
+            (s_co.z - vert.co.z) < max(rel_tol * max(abs(s_co.z), abs(vert.co.z)), abs_tol):
+                vert.select = True
+                print(str(vert.index))
+                print('selected vert')
+                
     #endregion
 
     #region Sheet Mesh
 
     def process_sheets(self, context):
-        '''Turns sheet mesh into vert coords for new particle hair'''
+        '''Turns sheet mesh input into vert coordinates for particle hair'''
 
         for proxy in self.sheet_list:
 
@@ -285,7 +342,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
             proxy_bm.free()
 
     def get_seams(self, proxy_bm):
-        '''Gets the loops attached to the edges perpendicular to marked seams'''
+        '''Returns the loops attached to the edges perpendicular to marked seams'''
 
         seam_verts = []
         
@@ -321,6 +378,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
 
 
     def backward_edge_walk(self, context, proxy, loop):
+        '''Walks backward along an edge storing vertices until it hits a seam or a new edge'''
 
         vert_comparison = len(loop.vert.link_edges)
 
@@ -333,7 +391,8 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         guide.append(loop.vert.co)
         
         inf_block = 2
-        while loop.link_loop_prev != loop.link_loop_prev.link_loop_radial_prev and len(loop.vert.link_edges) >= vert_comparison:
+        while loop.link_loop_prev != loop.link_loop_prev.link_loop_radial_prev and \
+            len(loop.vert.link_edges) >= vert_comparison:
             
             loop = loop.link_loop_prev.link_loop_radial_prev.link_loop_prev
 
@@ -347,6 +406,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         return guide
 
     def forward_edge_walk(self, context, proxy, loop):
+        '''Walks forward along an edge storing vertices until it hits a seam or a new edge'''
         
         vert_comparison = len(loop.link_loop_next.vert.link_edges)
 
@@ -359,7 +419,8 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         guide.append(loop.link_loop_next.vert.co)
 
         inf_block = 2
-        while loop.link_loop_next != loop.link_loop_next.link_loop_radial_next and len(loop.link_loop_next.vert.link_edges) >= vert_comparison:
+        while loop.link_loop_next != loop.link_loop_next.link_loop_radial_next and \
+            len(loop.link_loop_next.vert.link_edges) >= vert_comparison:
             
             loop = loop.link_loop_next.link_loop_radial_next.link_loop_next
 
@@ -455,8 +516,8 @@ class HAIRNET_OT_operator (bpy.types.Operator):
     def evaluate_dependency_graph(self, context):
         '''Grabs the most recent data from the scene to evaluate'''
         depsgraph = bpy.context.evaluated_depsgraph_get()
-        depObj = data.hair_source.evaluated_get(depsgraph)
-        return depObj.particle_systems.active
+        eval_source = data.hair_source.evaluated_get(depsgraph)
+        return eval_source.particle_systems.active
     
     def particle_creation_cleanup(self, context, cam_dist, cam_view):
         '''sets back to object mode, clears selection, hides proxies if applicable, and resets camera view'''

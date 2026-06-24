@@ -66,9 +66,9 @@ class HAIRNET_PT_advanced_panel(bpy.types.Panel):
         row = layout.row()
         row.prop(data.scene.hn_props, 'root_select_mode')
 
-        # ROOT OBJECT
+        # ROOT Locator
         row = layout.row()
-        row.prop_search(data.scene.hn_props, 'root_object', bpy.data, 'objects', text='Root Object')
+        row.prop_search(data.scene.hn_props, 'root_locator', bpy.data, 'objects', text='Root Locator')
 
         layout.use_property_split = True
 

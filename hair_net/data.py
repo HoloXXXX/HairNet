@@ -21,9 +21,9 @@ class HairNetProperties(PropertyGroup):
         description='Particle settings to be copied to the new particle system. If you want to generate new settings, leave this blank.',
         default='')
     
-    root_object: StringProperty(
-        name='Root Object',
-        description='Select an object to use as an indicator for which side of the hair should be the root.',
+    root_locator: StringProperty(
+        name='Root Locator',
+        description='Select an object to use as an indicator for which side of the hair should be the root. This is the location of the transform in the viewport when "bounding box center" is selected as the objects transform pivot point.',
         default='')
     
     add_to_existing: BoolProperty(
