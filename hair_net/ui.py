@@ -62,21 +62,25 @@ class HAIRNET_PT_advanced_panel(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         
-        # ROOT SELECT MODE
-        row = layout.row()
-        row.prop(data.scene.hn_props, 'root_select_mode')
+        # CURVE RESOLUTION
+        col = layout.column()
+        sub = col.column()
+        sub.prop(data.scene.hn_props, 'curve_resolution')
 
-        # ROOT Locator
-        row = layout.row()
-        row.prop_search(data.scene.hn_props, 'root_locator', bpy.data, 'objects', text='Root Locator')
-
-        layout.use_property_split = True
-
-        # ROOT OBJECT
+        # MAX KEYS
         col = layout.column()
         sub = col.column()
         sub.prop(data.scene.hn_props, 'max_keys')
 
+        # ROOT SELECT MODE
+        row = layout.row()
+        row.prop(data.scene.hn_props, 'root_select_mode')
+
+        # ROOT LOCATOR
+        row = layout.row()
+        row.prop_search(data.scene.hn_props, 'root_locator', bpy.data, 'objects', text='Root Locator')
+
+        layout.use_property_split = True
 
 class HAIRNET_PT_hair_objects_panel(bpy.types.Panel):
     bl_label = 'Hair Objects'

@@ -41,6 +41,14 @@ class HairNetProperties(PropertyGroup):
         description='This is a tool to fix reversed roots. When checked, selected vertices on hairs will be prioritized for determining roots. Seams on sheet mesh override this.',
         default=False)
     
+    curve_resolution: IntProperty(
+        name='Curve Resolution',
+        description='This is number is 1 less than the number of hair keys the tool will set the particle as. If it\'s set to 0, the resolution on each individual curve will be used. Does not affect "Curves" objects.',
+        default=0,
+        min=0,
+        max=64,
+        options = set())
+    
     max_keys: IntProperty(
         name='Max Hair Keys',
         description='This prevents the tool from getting stuck in an endless iteration. Set this value to a little above what you would expec the maximum number of keys to be for any given particle',

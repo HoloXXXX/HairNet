@@ -42,7 +42,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         # SETUP
         if self.init_check(): return {'CANCELLED'}
         if self.set_particle_system(context): return {'CANCELLED'}
-        self.set_hair_root_object(context)
+        self.set_hair_root_locator(context)
         self.sort_proxies(context)
         self.initial_user_report(context)
 
@@ -62,9 +62,13 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         if len(data.proxy_hair_guides) == 0:
             self.report({'ERROR_INVALID_INPUT'}, 'Please select at least one valid hair proxy object.')
             return True
-        if data.hair_source.data != "MESH":
+        if data.hair_source.type != "MESH":
             self.report({'ERROR_INVALID_INPUT'}, 'Please ensure the active object is capable of hosting a particle system.')
             return True
+        else:
+            if len(data.hair_source.data.polygons) == 0:
+                self.report({'ERROR_INVALID_INPUT'}, 'Please ensure the active object has at least one face.')
+                return True
         return False
 
     def set_particle_system(self,context):
@@ -77,10 +81,10 @@ class HAIRNET_OT_operator (bpy.types.Operator):
 
         return False
     
-    def set_hair_root_object(self, context):
+    def set_hair_root_locator(self, context):
         '''Sets what object will be used when determing which vert of a fiber or curve to set as the root.'''
-        if context.scene.hn_props.root_object == True:
-            self.hair_root_loc = bpy.data.objects[context.scene.hn_props.root_object].location
+        if context.scene.hn_props.root_locator == True:
+            self.hair_root_loc = bpy.data.objects[context.scene.hn_props.root_locator].location
         self.hair_root_loc = self.get_object_center(data.hair_source)
     
     def get_object_center(self, object):
@@ -216,9 +220,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         if context.scene.hn_props.root_select_mode:
             for vert in end_verts:
                 if vert.select == True:
-                    print('vert selected')
                     return vert
-                print('vert not selected')
 
         closest_vert = end_verts[0]
         for vert in end_verts:
@@ -267,11 +269,11 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         for curve in self.curve_list:
             bpy.ops.object.select_all(action='DESELECT')
             curve.select_set(True)
+            self.set_curve_resolution(context, curve)
             bpy.ops.object.duplicate(linked=False)
             bpy.ops.object.convert(target='MESH', keep_original=False)
             curve_meshes.append(bpy.context.selected_objects[0])
-            self.select_curve_mesh_roots(context, curve_meshes)
-            print('curve passed')
+            self.select_curve_mesh_root(context, curve_meshes)
     
         self.process_fibermesh(context, curve_meshes)
 
@@ -279,7 +281,13 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         for curve_mesh in curve_meshes:
             scene_meshes.remove(curve_mesh.data, do_unlink=True)
 
-    def select_curve_mesh_roots(self, context, curve_meshes):
+    def set_curve_resolution(self, context, curve):
+        if context.scene.hn_props.curve_resolution == 0 or \
+            curve.type == "CURVES":
+            return
+        curve.data.resolution_u = context.scene.hn_props.curve_resolution
+
+    def select_curve_mesh_root(self, context, curve_meshes):
         '''Transfers root selection to new mesh'''
 
         if not context.scene.hn_props.root_select_mode or \
@@ -317,8 +325,6 @@ class HAIRNET_OT_operator (bpy.types.Operator):
             (s_co.y - vert.co.y) < max(rel_tol * max(abs(s_co.y), abs(vert.co.y)), abs_tol) and \
             (s_co.z - vert.co.z) < max(rel_tol * max(abs(s_co.z), abs(vert.co.z)), abs_tol):
                 vert.select = True
-                print(str(vert.index))
-                print('selected vert')
                 
     #endregion
 
@@ -490,32 +496,40 @@ class HAIRNET_OT_operator (bpy.types.Operator):
             bpy.context.scene.tool_settings.particle_edit.default_key_count = len(guide)
 
             ps = self.evaluate_dependency_graph(context)
-
+            
             # From what I can work out there are 3 requirements for brush edit to complete successfully. 
             # 1. The space must be view3d. 
             # 2. A particle brush must be active. 
             # 3. The particle system must be a hair system (not an emitter (and only when using the add brush)).
-            bpy.ops.particle.brush_edit(stroke=[{"name":"", "location":(0, 0, 0), "mouse":(x, y), "mouse_event":(0, 0), "pressure":0, "size":0, "x_tilt":0, "y_tilt":0, "time":0, "is_start":False}], pen_flip=False)  
+            bpy.ops.particle.brush_edit(stroke=[{"name":"", "location":(0, 0, 0), "mouse":(x, y), "mouse_event":(0, 0), "pressure":0, "size":0, "x_tilt":0, "y_tilt":0, "time":0, "is_start":False}], pen_flip=False)
 
             ps = self.evaluate_dependency_graph(context)
 
-            new_particle = ps.particles[-1]
-            new_particle.location = guide[0]
+            try:
+                new_particle = ps.particles[-1]
+                new_particle.location = guide[0]
+            except:
+                self.report({'ERROR'}, 'Could not create particle. Please see the Troubleshooting section of the README')
+                bpy.ops.object.mode_set(mode = 'OBJECT')
+                return
 
-            for j in range(0, len(guide)):
-                ps = self.evaluate_dependency_graph(context)
-                ps.particles[-1].hair_keys[j].co = guide[j]
+            self.set_hair_keys(context, guide)
                 
         # THIS IS NEEDED TO MAKE THE KEY CHANGES TO THE LAST PARTICLE STICK. I don't know why, and I don't ask questions of the machine gods who rule us
         bpy.ops.particle.brush_edit(stroke=[{"name":"", "location":(0, 0, 0), "mouse":(-10000,-10000), "mouse_event":(0, 0), "pressure":0, "size":0, "x_tilt":0, "y_tilt":0, "time":0, "is_start":False}], pen_flip=False)
 
         self.particle_creation_cleanup(context, cd, cv)
 
-        return
+        return        
+
+    def set_hair_keys(self, context, guide):
+        for j in range(0, len(guide)):
+            ps = self.evaluate_dependency_graph(context)
+            ps.particles[-1].hair_keys[j].co = guide[j]
     
     def evaluate_dependency_graph(self, context):
         '''Grabs the most recent data from the scene to evaluate'''
-        depsgraph = bpy.context.evaluated_depsgraph_get()
+        depsgraph = context.evaluated_depsgraph_get()
         eval_source = data.hair_source.evaluated_get(depsgraph)
         return eval_source.particle_systems.active
     
