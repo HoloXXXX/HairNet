@@ -115,7 +115,7 @@ class HAIRNET_PT_hair_objects_panel(bpy.types.Panel):
         
         # HAIR Labels
         box = layout.box()
-        split = box.split(factor=0.3)
+        split = box.split()
         col = split.column()
         col.label(text='Hair Source:')
         col.label(text = 'Guide Hairs:')

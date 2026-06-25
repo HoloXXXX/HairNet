@@ -441,7 +441,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
 
             inf_block +=1
             if inf_block == context.scene.hn_props.max_keys:
-                self.report({'WARNING'}, ''.join(['Fiber on ', proxy.name, ' Meshsheet hit max key amount. --- continuing']))
+                self.report({'WARNING'}, ''.join(['Fiber on ', proxy.name, ' Sheetmesh hit max key amount. --- continuing']))
                 break
             
         return guide
@@ -469,7 +469,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
             
             inf_block +=1
             if inf_block == context.scene.hn_props.max_keys:
-                self.report({'WARNING'}, ''.join(['Fiber on ', proxy.name, ' Meshsheet hit max key amount. --- continuing']))
+                self.report({'WARNING'}, ''.join(['Fiber on ', proxy.name, ' Sheetmesh hit max key amount. --- continuing']))
                 break
         
         return guide
@@ -543,7 +543,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         for i in range(0,len(self.hair_guides)):
 
             guide = self.create_new_particle(context, x, y, i)
-            self.set_new_particle(context, guide)
+            if self.set_new_particle(context, guide): return
             self.set_hair_keys(context, guide)
 
         self.particle_creation_cleanup(context, cd, cv)
@@ -568,10 +568,11 @@ class HAIRNET_OT_operator (bpy.types.Operator):
             ps = self.evaluate_dependency_graph(context)
             new_particle = ps.particles[-1]
             new_particle.location = guide[0]
+            return False
         except:
             self.report({'ERROR'}, 'Could not create particle. Please see the Troubleshooting section of the README')
             bpy.ops.object.mode_set(mode = 'OBJECT')
-            return
+            return True
 
     def set_hair_keys(self, context, guide):
         for j in range(0, len(guide)):
