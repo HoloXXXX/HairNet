@@ -23,7 +23,7 @@ class HairNetProperties(PropertyGroup):
     
     root_locator: StringProperty(
         name='Root Locator',
-        description='Select an object to use as an indicator for which side of the hair should be the root. This is the location of the transform in the viewport when "bounding box center" is selected as the objects transform pivot point.',
+        description='Select an object to use as an indicator for which side of the hair should be the root. This is the location of the transform in the viewport when "bounding box center" is selected as the objects transform pivot point. This is overridden by root select mode when it applies.',
         default='')
     
     add_to_existing: BoolProperty(
@@ -43,7 +43,7 @@ class HairNetProperties(PropertyGroup):
     
     root_select_mode: BoolProperty(
         name='Root Select Mode',
-        description='This is a tool to fix reversed roots. When checked, selected vertices on hairs will be prioritized for determining roots. Seams on sheet mesh override this.',
+        description='This is a tool to fix reversed roots. When checked, selected vertices on hairs will be prioritized for determining roots. Seams on sheet mesh override this. Doesn\'t support objects with multiple meshes or curves with multiple splines.',
         default=False)
     
     curve_resolution: IntProperty(

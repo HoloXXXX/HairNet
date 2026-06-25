@@ -83,8 +83,9 @@ class HAIRNET_OT_operator (bpy.types.Operator):
     
     def set_hair_root_locator(self, context):
         '''Sets what object will be used when determing which vert of a fiber or curve to set as the root.'''
-        if context.scene.hn_props.root_locator == True:
+        if context.scene.hn_props.root_locator != '':
             self.hair_root_loc = bpy.data.objects[context.scene.hn_props.root_locator].location
+            return
         self.hair_root_loc = self.get_object_center(data.hair_source)
     
     def get_object_center(self, object):
@@ -137,7 +138,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                         self.curve_list.append(proxy)
                 case "MESH":
                     if self.fiber_or_sheet(proxy.data):
-                        self.fibermesh_list.append(proxy)
+                        self.fibermesh_list.append((proxy, proxy.name))
                     else:
                         self.sheet_list.append(proxy)
                 case _:
@@ -171,7 +172,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
 
         proxies.append('FIBERMESH:')
         for proxy in self.fibermesh_list:
-            proxies.append(''.join([' --- ', proxy.name]))
+            proxies.append(''.join([' --- ', proxy[1]]))
         
         proxies.append('CURVES:')
         for proxy in self.curve_list:
@@ -198,9 +199,9 @@ class HAIRNET_OT_operator (bpy.types.Operator):
     def process_fibermesh(self, context, mesh_list):
         '''Turns fibermesh input into vert coordinates for particle hair'''
 
-        for proxy in mesh_list:
-
-            proxies = self.separate_mesh(context, proxy)
+        for i in range(0, len(mesh_list)):
+            
+            proxies = self.separate_mesh(context, mesh_list[i][0])
 
             for proxymesh in proxies:
 
@@ -210,12 +211,12 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                 end_verts = self.get_end_verts(proxy_bm)
 
                 if len(end_verts) == 0:
-                    self.report({'WARNING'}, ''.join(['A mesh on ', proxy.name, ' has no end verts and therefore excluded --- continuing']))
+                    self.report({'WARNING'}, ''.join(['A mesh in ', mesh_list[i][1], ' has no end verts and is therefore excluded --- continuing']))
                     continue
 
-                root_vert = self.decide_root(context, end_verts)
-                guide = self.fibers_to_vert_co(context, proxy, root_vert)
-                guide = self.co_space_conversion(proxy, guide)
+                root_vert = self.decide_root(context, mesh_list[i][0], end_verts)
+                guide = self.fibers_to_vert_co(context, mesh_list[i][1], root_vert)
+                guide = self.co_space_conversion(mesh_list[i][0], guide)
                 self.hair_guides.append(guide)
 
                 proxy_bm.free()
@@ -233,17 +234,21 @@ class HAIRNET_OT_operator (bpy.types.Operator):
 
         return end_verts
 
-    def decide_root(self, context, end_verts):
+    def decide_root(self, context, proxy, end_verts):
         '''This function takes in verts with only one edge and decides which of these will become the root.'''
         if context.scene.hn_props.root_select_mode:
             for vert in end_verts:
                 if vert.select == True:
                     return vert
+                
+        world_vert_co = [proxy.matrix_world @ vert.co for vert in end_verts]
 
         closest_vert = end_verts[0]
-        for vert in end_verts:
-            if vert.co - self.hair_root_loc < closest_vert.co - self.hair_root_loc:
-                closest_vert = vert
+        closest_vert_index = 0
+        for i in range(0,len(world_vert_co)):
+            if world_vert_co[i] - self.hair_root_loc < world_vert_co[closest_vert_index] - self.hair_root_loc:
+                closest_vert = end_verts[i]
+                closest_vert_index = i
 
         return closest_vert
     
@@ -270,8 +275,8 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                     break
                 inf_block += 1
                 if inf_block == context.scene.hn_props.max_keys:
-                    self.report({'WARNING'}, ''.join(['Object ', proxy.name, ' hit max key amount. Discarding fiber. --- continuing']))
-                    return
+                    self.report({'WARNING'}, ''.join(['Object ', proxy, ' hit max key amount. --- continuing']))
+                    break
             return guide
     
     #endregion
@@ -282,6 +287,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         '''Turns curve input into vert coordinates for particle hair'''
 
         curve_meshes = []
+        curve_data = []
 
         # It's less efficient to duplicate and convert the objects in the for loop rather than all at once, but it's necessary for speeding up the comparison of the root select.
         for curve in self.curve_list:
@@ -290,13 +296,13 @@ class HAIRNET_OT_operator (bpy.types.Operator):
             self.set_curve_resolution(context, curve)
             bpy.ops.object.duplicate(linked=False)
             bpy.ops.object.convert(target='MESH', keep_original=False)
-            curve_meshes.append(bpy.context.selected_objects[0])
-            self.select_curve_mesh_root(context, curve_meshes)
-    
-        self.process_fibermesh(context, curve_meshes)
-                
-        self.cleanup_meshes(curve_meshes)
+            curve_meshes.append((bpy.context.selected_objects[0]))
+            curve_data.append((bpy.context.selected_objects[0], curve.name))
 
+        self.select_curve_mesh_root(context, curve_meshes)
+        self.process_fibermesh(context, curve_data)
+        self.cleanup_meshes(curve_meshes)
+            
     def set_curve_resolution(self, context, curve):
         if context.scene.hn_props.curve_resolution == 0 or \
             curve.type == "CURVES":
@@ -304,17 +310,20 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         curve.data.resolution_u = context.scene.hn_props.curve_resolution
 
     def select_curve_mesh_root(self, context, curve_meshes):
-        '''Transfers root selection to new mesh'''
+        '''Transfers root selection to newly created curve mesh'''
 
-        if not curve_meshes[-1].type == "CURVES" or \
-            context.scene.hn_props.root_select_mode:
+        if not context.scene.hn_props.root_select_mode:
             return
 
-        for i in range(0,len(curve_meshes)):
+        for i in range(0,len(self.curve_list)):
+
+            if self.curve_list[i].type == "CURVES":
+                continue
+
             selected_point_coords = self.get_og_selected_curve_points(i)
 
-            for s_co in selected_point_coords:
-                self.select_curve_mesh_verts(s_co, curve_meshes[i])
+            for j in range(0,len(selected_point_coords)):
+                self.select_curve_mesh_verts(selected_point_coords[j], curve_meshes[i])
 
     def get_og_selected_curve_points(self, i):
         '''Gets the coordinates of the selected points of the original curve'''
@@ -332,14 +341,18 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         
         return selected_coords
 
-    def select_curve_mesh_verts(self, s_co, curve_mesh, rel_tol=1e-09, abs_tol=0.001):
+    def select_curve_mesh_verts(self, s_co, curve_mesh):
         '''Select vert if within a tolerance of the selected point on the curve'''
 
         for vert in curve_mesh.data.vertices:
-            if abs(s_co.x - vert.co.x) < max(rel_tol * max(abs(s_co.x), abs(vert.co.x)), abs_tol) and \
-            (s_co.y - vert.co.y) < max(rel_tol * max(abs(s_co.y), abs(vert.co.y)), abs_tol) and \
-            (s_co.z - vert.co.z) < max(rel_tol * max(abs(s_co.z), abs(vert.co.z)), abs_tol):
+            if self.verts_location_same(s_co, vert.co):
                 vert.select = True
+
+    def verts_location_same(self, vert1, vert2, rel_tol=1e-09, abs_tol=0.001):
+        if abs(vert1.x - vert2.x) < max(rel_tol * max(abs(vert1.x), abs(vert2.x)), abs_tol) and \
+            (vert1.y - vert2.y) < max(rel_tol * max(abs(vert1.y), abs(vert2.y)), abs_tol) and \
+            (vert1.z - vert2.z) < max(rel_tol * max(abs(vert1.z), abs(vert2.z)), abs_tol):
+            return True
                 
     #endregion
 
@@ -352,15 +365,16 @@ class HAIRNET_OT_operator (bpy.types.Operator):
 
             proxies = self.separate_mesh(context, proxy)
 
-            for proxymesh in proxies:
+            for proxy_mesh in proxies:
 
                 proxy_bm = bmesh.new()
-                proxy_bm.from_mesh(proxymesh.data)
+                proxy_bm.from_mesh(proxy_mesh.data)
 
                 bm_loops = self.get_seams(proxy_bm)            
 
                 if len(bm_loops) == 0:
                         self.report({'WARNING'}, ''.join(['No valid seams found on ', proxy.name, ' and therefore excluded --- continuing']))
+                        continue
 
                 self.fibers_from_sheet_mesh(context, proxy, bm_loops)
 
@@ -427,8 +441,8 @@ class HAIRNET_OT_operator (bpy.types.Operator):
 
             inf_block +=1
             if inf_block == context.scene.hn_props.max_keys:
-                self.report({'WARNING'}, ''.join(['Fiber on ', proxy.name, ' sheet hit max key amount. Discarding fiber. --- continuing']))
-                return
+                self.report({'WARNING'}, ''.join(['Fiber on ', proxy.name, ' Meshsheet hit max key amount. --- continuing']))
+                break
             
         return guide
 
@@ -455,8 +469,8 @@ class HAIRNET_OT_operator (bpy.types.Operator):
             
             inf_block +=1
             if inf_block == context.scene.hn_props.max_keys:
-                self.report({'WARNING'}, ''.join(['Fiber on ', proxy.name, ' sheet hit max key amount. Discarding fiber. --- continuing']))
-                return
+                self.report({'WARNING'}, ''.join(['Fiber on ', proxy.name, ' Meshsheet hit max key amount. --- continuing']))
+                break
         
         return guide
     
@@ -471,6 +485,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         '''Converts the vertex coordinates into the space of the hair source mesh'''
         converted_guide = []
         proxy_mat = proxy.matrix_world
+
         for co in guide:
             world_co = proxy_mat @ co
             obj_co = data.hair_source.matrix_world.inverted() @ world_co

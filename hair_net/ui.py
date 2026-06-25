@@ -42,8 +42,9 @@ class HAIRNET_PT_view_panel(bpy.types.Panel):
         if data.scene.hn_props.add_to_existing == False:
             row = box.row()
             row.label(text='Particle Settings:')
-            row = box.row()
-            row.prop_search(data.scene.hn_props, 'particle_settings',  bpy.data, 'particles', text='')
+            sub = row.row()
+            sub.scale_x = 1.475
+            sub.prop_search(data.scene.hn_props, 'particle_settings',  bpy.data, 'particles', text='')
 
 class HAIRNET_PT_advanced_panel(bpy.types.Panel):
     bl_label = 'Advanced Features'
@@ -112,22 +113,17 @@ class HAIRNET_PT_hair_objects_panel(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         
-        # HAIR SOURCE LABEL DISPLAY
-        row = layout.row()
+        # HAIR Labels
         box = layout.box()
-        row = box.row()
-        row.label(text='Hair Source:')
-        if data.hair_source is not None:
-            row.label(text=data.hair_source.name)
-
-        # HAIR OBJECT LIST
-        split = box.split()
-
-        col = row.column()
+        split = box.split(factor=0.3)
         col = split.column()
+        col.label(text='Hair Source:')
         col.label(text = 'Guide Hairs:')
 
+        # HAIR OBJECTS
         col = split.column()
+        if data.hair_source is not None:
+            col.label(text=data.hair_source.name)
         for proxy_hair in data.proxy_hair_guides:
             col.label(text = proxy_hair.name)
 
