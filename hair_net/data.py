@@ -41,6 +41,11 @@ class HairNetProperties(PropertyGroup):
         description='When selected, only the initial report phase of HairNet will execute. It will output if the active object is valid, which particle system will be used, and valid and invalid proxy objects in the info box. This is useful if you have a slow computer and a lot of objects to convert.',
         default=False)
     
+    snap_roots: BoolProperty(
+        name='Snap Roots',
+        description='When enabled the particle roots will be snapped to the mesh of the hair source object.',
+        default=False)
+    
     root_select_mode: BoolProperty(
         name='Root Select Mode',
         description='This is a tool to fix reversed roots. When checked, selected vertices on hairs will be prioritized for determining roots. Seams on sheet mesh override this. Doesn\'t support objects with multiple meshes or curves with multiple splines.',

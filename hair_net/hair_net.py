@@ -32,9 +32,10 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         
         # INIT
         self.hair_root_loc = object
+        self.hair_source_matrix_inverted = object
         self.fibermesh_list = []
         self.curve_list = []
-        self.sheet_list = []  
+        self.sheet_list = []
         self.hair_guides = []
 
         # SETUP
@@ -43,6 +44,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         if no_valid_proxies: return {'CANCELLED'}
         if self.set_particle_system(context): return {'CANCELLED'}
         self.set_hair_root_locator(context)
+        self.set_hair_source_matrix_inverted()
         self.initial_user_report(context, beveled_curve_list, other_type_list)
         if context.scene.hn_props.configuration_mode: return {'FINISHED'}
 
@@ -70,54 +72,6 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                 self.report({'ERROR_INVALID_INPUT'}, 'Please ensure the active object has at least one face.')
                 return True
         return False
-
-    def set_particle_system(self,context):
-        '''Handles all of the logic for which particle system should be used'''
-        if context.scene.hn_props.add_to_existing:
-            return self.add_to_existing_system()           
-            
-        bpy.ops.object.particle_system_add()     
-        self.set_particle_system_settings(context)
-
-        return False
-    
-    def set_hair_root_locator(self, context):
-        '''Sets what object will be used when determing which vert of a fiber or curve to set as the root.'''
-        if context.scene.hn_props.root_locator != '':
-            self.hair_root_loc = bpy.data.objects[context.scene.hn_props.root_locator].location
-            return
-        self.hair_root_loc = self.get_object_center(data.hair_source)
-    
-    def get_object_center(self, object):
-        # from https://blender.stackexchange.com/questions/62040/get-center-of-geometry-of-an-object
-        x, y, z = [ sum( [v.co[i] for v in object.data.vertices] ) for i in range(3)]
-
-        count = float(len(object.data.vertices))
-
-        return object.matrix_world @ (Vector( (x, y, z ) ) / count )
-    
-    def add_to_existing_system(self):
-        '''Handles error checking for adding to an existing particle system'''
-        if data.hair_source.particle_systems.active == None:
-            self.report({'ERROR_INVALID_INPUT'}, 'You need to have an active particle system on the object to add to an existing hair system.')
-            return True
-        if data.hair_source.particle_systems.active.settings.type == 'EMITTER':
-            self.report({'ERROR_INVALID_INPUT'}, 'The active particle system must be a hair system.')
-            return True
-        return False
-
-    def set_particle_system_settings(self, context):
-        '''Sets the particle settings for a new particle system'''
-
-        if context.scene.hn_props.particle_settings == '':
-            data.hair_source.particle_systems.active.settings.type = 'HAIR'
-            data.hair_source.particle_systems.active.settings.count = 0
-            return True
-
-        for ps in bpy.data.particles:
-            if ps.name == context.scene.hn_props.particle_settings:
-                data.hair_source.particle_systems.active.settings = ps
-                return True
     
     def sort_proxies(self):
         '''Sorts the input proxy hair guides. Returns fibermesh, curves, sheet mesh, beveled curves, and "other" type lists'''
@@ -155,6 +109,52 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         if len(mesh.polygons) == 0:
             return True        
         return False
+
+    def set_particle_system(self,context):
+        '''Handles all of the logic for which particle system should be used'''
+
+        if context.scene.hn_props.add_to_existing:
+            if data.hair_source.particle_systems.active == None:
+                self.report({'ERROR_INVALID_INPUT'}, 'You need to have an active particle system on the object to add to an existing hair system.')
+                return True
+        else:
+            bpy.ops.object.particle_system_add()
+            self.set_particle_system_settings(context)
+
+        if data.hair_source.particle_systems.active.settings.type == 'EMITTER':
+            self.report({'ERROR_INVALID_INPUT'}, 'The active particle system must be a hair system.')
+            return True
+        
+        return False
+
+    def set_particle_system_settings(self, context):
+        '''Sets the particle settings for a new particle system'''
+
+        if context.scene.hn_props.particle_settings == '':
+            data.hair_source.particle_systems.active.settings.type = 'HAIR'
+            data.hair_source.particle_systems.active.settings.count = 0
+            return
+
+        data.hair_source.particle_systems.active.settings = bpy.data.particles[context.scene.hn_props.particle_settings]
+        data.hair_source.particle_systems.active.settings.count = 0
+    
+    def set_hair_root_locator(self, context):
+        '''Sets what object will be used when determing which vert of a fiber or curve to set as the root.'''
+        if context.scene.hn_props.root_locator != '':
+            self.hair_root_loc = bpy.data.objects[context.scene.hn_props.root_locator].location
+            return
+        self.hair_root_loc = self.get_object_center(data.hair_source)
+    
+    def get_object_center(self, object):
+        # from https://blender.stackexchange.com/questions/62040/get-center-of-geometry-of-an-object
+        x, y, z = [ sum( [v.co[i] for v in object.data.vertices] ) for i in range(3)]
+
+        count = float(len(object.data.vertices))
+
+        return object.matrix_world @ (Vector( (x, y, z ) ) / count )
+
+    def set_hair_source_matrix_inverted(self):
+        self.hair_source_matrix_inverted = data.hair_source.matrix_world.inverted()
     
     def initial_user_report(self, context, beveled_curve_list, other_type_list):
         '''Reports to the user in the info box. Names the hair system that will be used, then lists the proxy objects by type, and finally outputs warnings for invalid objects.'''
@@ -197,7 +197,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
     #region Fibermesh
 
     def process_fibermesh(self, context, mesh_list):
-        '''Turns fibermesh input into vert coordinates for particle hair'''
+        '''Turns fibermesh input into vert coordinates for particle hair. mesh_list is a tuple of (proxy object, proxy name)'''
 
         for i in range(0, len(mesh_list)):
             
@@ -207,6 +207,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
 
                 proxy_bm = bmesh.new()
                 proxy_bm.from_mesh(proxymesh.data)
+                proxy_bm.verts.ensure_lookup_table()
 
                 end_verts = self.get_end_verts(proxy_bm)
 
@@ -215,8 +216,8 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                     continue
 
                 root_vert = self.decide_root(context, mesh_list[i][0], end_verts)
-                guide = self.fibers_to_vert_co(context, mesh_list[i][1], root_vert)
-                guide = self.co_space_conversion(mesh_list[i][0], guide)
+                guide = self.fibers_to_vert_co(context, mesh_list[i][0], root_vert)
+                guide = self.co_space_conversion(context, mesh_list[i][0], guide)
                 self.hair_guides.append(guide)
 
                 proxy_bm.free()
@@ -253,31 +254,37 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         return closest_vert
     
     def fibers_to_vert_co(self, context, proxy, root_vert):
-            '''Adds vert coordinates to guide list in order of edge connections'''
-            guide = []
-            guide.append(root_vert.co)
-            current_vert = root_vert
-            current_edge = root_vert.link_edges[0]
+        '''Adds vert coordinates to guide list in order of edge connections'''
 
-            inf_block = 1
-            while(True):
-                for v in current_edge.verts:
-                    if v != current_vert:
-                        guide.append(v.co)
-                        current_vert = v
-                        break
-                prev_edge = current_edge
-                for e in current_vert.link_edges:
-                    if e != current_edge:
-                        current_edge = e
-                        break
-                if prev_edge == current_edge:
+        guide = []
+
+        if context.scene.hn_props.snap_roots:                 
+            guide.append(self.snap_root(root_vert.co, proxy))
+        else:
+            guide.append(root_vert.co)
+
+        current_vert = root_vert
+        current_edge = root_vert.link_edges[0]
+
+        inf_block = 1
+        while(True):
+            for v in current_edge.verts:
+                if v != current_vert:
+                    guide.append(v.co)
+                    current_vert = v
                     break
-                inf_block += 1
-                if inf_block == context.scene.hn_props.max_keys:
-                    self.report({'WARNING'}, ''.join(['Object ', proxy, ' hit max key amount. --- continuing']))
+            prev_edge = current_edge
+            for e in current_vert.link_edges:
+                if e != current_edge:
+                    current_edge = e
                     break
-            return guide
+            if prev_edge == current_edge:
+                break
+            inf_block += 1
+            if inf_block == context.scene.hn_props.max_keys:
+                self.report({'WARNING'}, ''.join(['Object ', proxy.name, ' hit max key amount. --- continuing']))
+                break
+        return guide
     
     #endregion
 
@@ -348,10 +355,8 @@ class HAIRNET_OT_operator (bpy.types.Operator):
             if self.verts_location_same(s_co, vert.co):
                 vert.select = True
 
-    def verts_location_same(self, vert1, vert2, rel_tol=1e-09, abs_tol=0.001):
-        if abs(vert1.x - vert2.x) < max(rel_tol * max(abs(vert1.x), abs(vert2.x)), abs_tol) and \
-            (vert1.y - vert2.y) < max(rel_tol * max(abs(vert1.y), abs(vert2.y)), abs_tol) and \
-            (vert1.z - vert2.z) < max(rel_tol * max(abs(vert1.z), abs(vert2.z)), abs_tol):
+    def verts_location_same(self, vert1_co, vert2_co, rel_tol=1e-09, abs_tol=0.001):
+        if abs(vert2_co - vert1_co) < max(rel_tol * max(abs(vert1_co), abs(vert2_co), abs_tol)):
             return True
                 
     #endregion
@@ -369,6 +374,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
 
                 proxy_bm = bmesh.new()
                 proxy_bm.from_mesh(proxy_mesh.data)
+                proxy_bm.verts.ensure_lookup_table()
 
                 bm_loops = self.get_seams(proxy_bm)            
 
@@ -414,7 +420,10 @@ class HAIRNET_OT_operator (bpy.types.Operator):
             else:
                 guide = self.backward_edge_walk(context, proxy, loop)
 
-            guide = self.co_space_conversion(proxy, guide)
+            if context.scene.hn_props.snap_roots:
+                guide[0] = self.snap_root(guide[0], proxy)
+
+            guide = self.co_space_conversion(context, proxy, guide)
             self.hair_guides.append(guide)
 
 
@@ -480,15 +489,36 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         bpy.ops.object.duplicate(linked=False)
         bpy.ops.mesh.separate(type="LOOSE")
         return context.selected_objects
+    
+    def snap_root(self, root_co, proxy):
+        '''Sets the root coordinate to the closest point on the hair source'''
+        # from here: https://blender.stackexchange.com/questions/58409/how-do-i-find-the-closest-point-on-another-mesh-to-a-vertex-with-python
+        
+        world_root_co = proxy.matrix_world @ root_co
+        local_root_co = self.hair_source_matrix_inverted @ world_root_co
 
-    def co_space_conversion(self, proxy, guide):
+        hit, loc, norm, face_index = data.hair_source.closest_point_on_mesh(local_root_co)
+        if hit:
+            return loc
+        else: 
+            self.report({'WARNING'}, ''.join(['Failed to snap root on ', proxy.name, ' --- continuing']))
+            return root_co
+
+    def co_space_conversion(self, context, proxy, guide):
         '''Converts the vertex coordinates into the space of the hair source mesh'''
+        
         converted_guide = []
-        proxy_mat = proxy.matrix_world
+        proxy_matrix = proxy.matrix_world
 
-        for co in guide:
-            world_co = proxy_mat @ co
-            obj_co = data.hair_source.matrix_world.inverted() @ world_co
+        if context.scene.hn_props.snap_roots:
+            converted_guide.append(guide[0])
+            start_index = 1
+        else:
+            start_index = 0
+
+        for i in range(start_index,len(guide)):
+            world_co = proxy_matrix @ guide[i]
+            obj_co = self.hair_source_matrix_inverted @ world_co
             converted_guide.append(obj_co)
 
         return converted_guide
@@ -523,7 +553,10 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         bpy.context.scene.tool_settings.particle_edit.use_preserve_root =  False
         bpy.context.scene.tool_settings.particle_edit.use_preserve_length = False
 
-        return cam_dist, cam_view, x, y
+        xray_val = bpy.context.area.spaces.active.shading.show_xray
+        bpy.context.area.spaces.active.shading.show_xray = False
+
+        return cam_dist, cam_view, x, y, xray_val
     
     def frame_objects(self):
         '''This method ensures the object will be centered in the screen for when the brush edit creates particles'''
@@ -538,22 +571,28 @@ class HAIRNET_OT_operator (bpy.types.Operator):
     def create_particle_hair(self, context):
         '''Creates the new hair using the vertex coordinates from the proxy objects'''
 
-        cd, cv, x, y = self.particle_creation_setup(context)
+        cd, cv, x, y, xray_val = self.particle_creation_setup(context)
 
         for i in range(0,len(self.hair_guides)):
 
-            guide = self.create_new_particle(context, x, y, i)
-            if self.set_new_particle(context, guide): return
-            self.set_hair_keys(context, guide)
+            guide = self.hair_guides[i]
 
-        self.particle_creation_cleanup(context, cd, cv)
+            self.create_new_particle(context, x, y, len(self.hair_guides[i]))
+            try:
+                self.set_new_particle(context, guide)
+                self.set_hair_keys(context, guide)
+            except: 
+                self.report({'ERROR'}, 'Could not create particle. Please see the Troubleshooting section of the README')
+                bpy.ops.object.mode_set(mode = 'OBJECT')
+                return
+
+        self.particle_creation_cleanup(context, x, y, cd, cv, xray_val)
 
         return 
     
-    def create_new_particle(self, context, x, y, i):
+    def create_new_particle(self, context, x, y, keys):
 
-        guide = self.hair_guides[i]
-        bpy.context.scene.tool_settings.particle_edit.default_key_count = len(guide)
+        bpy.context.scene.tool_settings.particle_edit.default_key_count = keys
         self.evaluate_dependency_graph(context) # this probably doesn't absolutely have to be here, but given how finnicky the particle system is I'm leaving it
             
             # From what I can work out there are 3 requirements for brush edit to complete successfully. 
@@ -561,18 +600,11 @@ class HAIRNET_OT_operator (bpy.types.Operator):
             # 2. A particle brush must be active. 
             # 3. The particle system must be a hair system (not an emitter (and only when using the add brush)).
         bpy.ops.particle.brush_edit(stroke=[{"name":"", "location":(0, 0, 0), "mouse":(x, y), "mouse_event":(0, 0), "pressure":0, "size":0, "x_tilt":0, "y_tilt":0, "time":0, "is_start":False}], pen_flip=False)
-        return guide       
     
     def set_new_particle(self, context, guide):
-        try:
-            ps = self.evaluate_dependency_graph(context)
-            new_particle = ps.particles[-1]
-            new_particle.location = guide[0]
-            return False
-        except:
-            self.report({'ERROR'}, 'Could not create particle. Please see the Troubleshooting section of the README')
-            bpy.ops.object.mode_set(mode = 'OBJECT')
-            return True
+        ps = self.evaluate_dependency_graph(context)
+        new_particle = ps.particles[-1]
+        new_particle.location = guide[0]
 
     def set_hair_keys(self, context, guide):
         for j in range(0, len(guide)):
@@ -582,26 +614,77 @@ class HAIRNET_OT_operator (bpy.types.Operator):
     def evaluate_dependency_graph(self, context):
         '''Grabs the most recent data from the scene to evaluate'''
         depsgraph = context.evaluated_depsgraph_get()
-        eval_source = data.hair_source.evaluated_get(depsgraph)
-        return eval_source.particle_systems.active
+        return data.hair_source.evaluated_get(depsgraph).particle_systems.active
     
-    def particle_creation_cleanup(self, context, cam_dist, cam_view):
+    def particle_creation_cleanup(self, context, x, y, cam_dist, cam_view, xray_val):
         '''sets back to object mode, clears selection, hides proxies if applicable, and resets camera view'''
 
-        # THIS IS NEEDED TO MAKE THE KEY CHANGES TO THE LAST PARTICLE STICK. I don't know why, and I don't ask questions of the machine gods who rule us
-        bpy.ops.particle.brush_edit(stroke=[{"name":"", "location":(0, 0, 0), "mouse":(-10000,-10000), "mouse_event":(0, 0), "pressure":0, "size":0, "x_tilt":0, "y_tilt":0, "time":0, "is_start":False}], pen_flip=False)
+        self.final_particle_system_cleanup(context, x, y)
 
         bpy.ops.object.mode_set(mode = 'OBJECT')
         bpy.ops.object.select_all(action='DESELECT')
+
+        bpy.context.area.spaces.active.shading.show_xray = xray_val
+
         if context.scene.hn_props.hide_proxies == True:
             self.hide_proxy_hair()
-        # unfortunately whenever you use particle brush edit it becomes impossible (afaik) to reset the camera. I have no idea why, but I'm leaving this camera reset in the code in case this changes in the future (and so that people are aware of the issue)
-        context.region_data.view_distance = cam_dist
-        context.region_data.view_matrix = cam_view
+
+        self.camera_reset(context, cam_dist, cam_view)
+
+    def final_particle_system_cleanup(self, context, x, y):
+        '''A FINAL EXTRA PARTICLE MUST BE CREATED TO MAKE THE KEY CHANGES TO THE LAST PARTICLE STICK. I don't know why, and I don't ask questions of the machine gods who rule us'''
+        
+        # things I've tried to remove this particle after creating it/not create it in the first place:
+        # Looked for a relevant command in bpy.ops.particle --- there's a delete function but it requires selection, and there's no way to select the particle through code that I'm aware of.
+        # Change the mouse location so it's never created --- The mouse lining up with the object seems to only be required every x particles
+        # Look for a way to directly remove it in bpy.types.particle --- setting alive state to dead has no effect (i think that property is just for emitters)
+        # Switch to object mode, then back to particle edit mode and bpy.ops.particle.edited_clear()
+        # Tried deleting directly from the particles list
+        # Added bpy.ops.ed.undo() --- this undoes the entirety of HairNet
+        # Switch to object mode, flush edits, switch to edit mode, create particle and undo. This messed up the final particle again.
+        # Tried .delete() and .remove() on the particle (even though I knew those weren't commands, I was desperate)
+        # Set the brush edit parameters to random values
+        # Duplicate the particle system and remove it instead of creating a new particle
+        # Switching to the cut brush and use it after creating the particle (even at very large size values it has no effect on any particles)
+        # Switching to every other type of brush to see if it would mimic the effect
+
+        # This is the best way I've found to get rid of the final particle. If you have a better solution please pull request it :D
+
+        # This function can't solely be contained in the loop when we make the hair in case the user is adding to an existing system. I'm adding 10 because I'm superstitious of some small error in the particle system API with adding only 1        
+        longest_particle = self.get_longest_particle(context)
+        bpy.context.scene.tool_settings.particle_edit.default_key_count = longest_particle + 10
+
+        self.evaluate_dependency_graph(context)
+        bpy.ops.particle.brush_edit(stroke=[{"name":"", "location":(0, 0, 0), "mouse":(x, y), "mouse_event":(0, 0), "pressure":0, "size":0, "x_tilt":0, "y_tilt":0, "time":0, "is_start":False}], pen_flip=False)#
+        self.evaluate_dependency_graph(context)
+
+        bpy.ops.particle.select_roots(action='SELECT')
+
+        # This could be longest particle - 1, but once again, superstitious with the particle system API
+        for i in range(0,longest_particle):
+            bpy.ops.particle.select_more()
+
+        bpy.ops.particle.select_all(action='INVERT')
+        bpy.ops.particle.select_linked()
+        bpy.ops.particle.delete(type='PARTICLE')
+
+    def get_longest_particle(self, context):
+        '''Returns the number of keys of the particle in the hair system that contains the most hair keys'''
+        ps = self.evaluate_dependency_graph(context)
+        longest_particle = 0
+        for i in range(0, len(ps.particles)):
+            if longest_particle < len(ps.particles[i].hair_keys): longest_particle = len(ps.particles[i].hair_keys)
+
+        return longest_particle
 
     def hide_proxy_hair(self):
         for proxy in data.proxy_hair_guides:
             proxy.hide_viewport = True    
+
+    def camera_reset(self, context, cam_dist, cam_view):
+        '''Unfortunately whenever you use particle brush edit it becomes impossible (afaik) to reset the camera. I have no idea why, but I'm leaving this camera reset in the code in case this changes in the future (and so that people are aware of the issue)'''
+        context.region_data.view_distance = cam_dist
+        context.region_data.view_matrix = cam_view
 
     #endregion
 

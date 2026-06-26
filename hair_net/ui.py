@@ -81,12 +81,14 @@ class HAIRNET_PT_advanced_panel(bpy.types.Panel):
         col = split.column()
         col.label(text='Root Settings:')
 
-        # ROOT SELECT MODE
+        # SNAP ROOTS
         col = split.column()
+        col.prop(data.scene.hn_props, 'snap_roots')
+
+        # ROOT SELECT MODE
         col.prop(data.scene.hn_props, 'root_select_mode')
 
         # ROOT LOCATOR
-        col = col.row()
         col.prop_search(data.scene.hn_props, 'root_locator', bpy.data, 'objects', text='')
 
         # CURVE BOX
