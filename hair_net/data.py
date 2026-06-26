@@ -21,6 +21,11 @@ class HairNetProperties(PropertyGroup):
         description='Particle settings to be copied to the new particle system. If you want to generate new settings, leave this blank.',
         default='')
     
+    proxy_collection_name: StringProperty(
+        name='Proxy Collection Name',
+        description='The name of the collection that proxies should be added to.',
+        default='Hair_Net_Proxies')
+    
     root_locator: StringProperty(
         name='Root Locator',
         description='Select an object to use as an indicator for which side of the hair should be the root. This is the location of the transform in the viewport when "bounding box center" is selected as the objects transform pivot point. This is overridden by root select mode when it applies.',
@@ -31,9 +36,9 @@ class HairNetProperties(PropertyGroup):
         description='Add the guide hairs to the active particle system. Requires an existing particle system to be active.',
         default=False)
     
-    hide_proxies: BoolProperty(
-        name='Hide Proxies',
-        description='Hide proxy hair after conversion into particle hair.',
+    link_to_collection: BoolProperty(
+        name='Link Proxies To Collection',
+        description='When selected, only the initial report phase of HairNet will execute. It will output if the active object is valid, which particle system will be used, and valid and invalid proxy objects in the info box. This is useful if you have a slow computer and a lot of objects to convert.',
         default=False)
     
     configuration_mode: BoolProperty(
@@ -41,8 +46,13 @@ class HairNetProperties(PropertyGroup):
         description='When selected, only the initial report phase of HairNet will execute. It will output if the active object is valid, which particle system will be used, and valid and invalid proxy objects in the info box. This is useful if you have a slow computer and a lot of objects to convert.',
         default=False)
     
-    snap_roots: BoolProperty(
-        name='Snap Roots',
+    hide_proxies: BoolProperty(
+        name='Hide Proxies',
+        description='Hide proxy hair after conversion into particle hair.',
+        default=False)
+    
+    root_snap_mode: BoolProperty(
+        name='Root Snap Mode',
         description='When enabled the particle roots will be snapped to the mesh of the hair source object.',
         default=False)
     

@@ -65,8 +65,15 @@ class HAIRNET_PT_advanced_panel(bpy.types.Panel):
         col = split.column()
         col.label(text='General Settings:')
 
-        # CONFIG MODE
+        # LINK TO COLLECTION
         col = split.column()
+        col.prop(data.scene.hn_props, 'link_to_collection')
+
+        # PROXY COLLECTION NAME
+        if data.scene.hn_props.link_to_collection:
+            col.prop_search(data.scene.hn_props, 'proxy_collection_name', bpy.data, 'collections', text='', results_are_suggestions=True)
+
+        # CONFIG MODE
         col.prop(data.scene.hn_props, 'configuration_mode')
 
         # HIDE PROXIES
@@ -81,9 +88,9 @@ class HAIRNET_PT_advanced_panel(bpy.types.Panel):
         col = split.column()
         col.label(text='Root Settings:')
 
-        # SNAP ROOTS
+        # ROOT SNAP MODE
         col = split.column()
-        col.prop(data.scene.hn_props, 'snap_roots')
+        col.prop(data.scene.hn_props, 'root_snap_mode')
 
         # ROOT SELECT MODE
         col.prop(data.scene.hn_props, 'root_select_mode')

@@ -216,12 +216,10 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                     continue
 
                 root_vert = self.decide_root(context, mesh_list[i][0], end_verts)
-                root_co = self.handle_root(context, mesh_list[i][0], root_vert)
-                guide = self.fibers_to_vert_co(context, mesh_list[i][0], root_vert)
+                root_co, guide = self.fibers_to_vert_co(context, mesh_list[i][0], root_vert)
                 guide = self.co_space_conversion(context, mesh_list[i][0], guide)
 
-                guide = [root_co] + guide
-                self.hair_guides.append(guide)
+                self.hair_guides.append(root_co + guide)
 
                 proxy_bm.free()
                 
@@ -256,17 +254,16 @@ class HAIRNET_OT_operator (bpy.types.Operator):
 
         return closest_vert
     
-    def handle_root(self, context, proxy, root_vert):
-        if context.scene.hn_props.snap_roots:
-            return self.snap_root(root_vert.co, proxy)
-        
-        return root_vert.co
-        
-    
     def fibers_to_vert_co(self, context, proxy, root_vert):
         '''Adds vert coordinates to guide list in order of edge connections'''
 
         guide = []
+        root_co = []
+
+        if context.scene.hn_props.root_snap_mode:
+            root_co.append(self.root_snap(root_vert.co, proxy))
+        else:
+            guide.append(root_vert.co)
 
         current_vert = root_vert
         current_edge = root_vert.link_edges[0]
@@ -289,7 +286,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
             if inf_block == context.scene.hn_props.max_keys:
                 self.report({'WARNING'}, ''.join(['Object ', proxy.name, ' hit max key amount. --- continuing']))
                 break
-        return guide
+        return root_co, guide
     
     #endregion
 
@@ -357,10 +354,10 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         '''Select vert if within a tolerance of the selected point on the curve'''
 
         for vert in curve_mesh.data.vertices:
-            if self.verts_location_same(s_co, vert.co):
+            if self.same_vert_location(s_co, vert.co):
                 vert.select = True
 
-    def verts_location_same(self, vert1_co, vert2_co, rel_tol=1e-09, abs_tol=0.001):
+    def same_vert_location(self, vert1_co, vert2_co, rel_tol=1e-09, abs_tol=0.001):
         if abs(vert2_co - vert1_co) < max(rel_tol * max(abs(vert1_co), abs(vert2_co), abs_tol)):
             return True
                 
@@ -440,8 +437,8 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         guide = []
         root_co = []
 
-        if context.scene.hn_props.snap_roots:
-            root_co.append(self.snap_root(loop.link_loop_next.vert.co, proxy))
+        if context.scene.hn_props.root_snap_mode:
+            root_co.append(self.root_snap(loop.link_loop_next.vert.co, proxy))
         else: 
             guide.append(loop.link_loop_next.vert.co)
 
@@ -473,8 +470,8 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         guide = []
         root_co = []
 
-        if context.scene.hn_props.snap_roots:
-            root_co.append(self.snap_root(loop.vert.co, proxy))
+        if context.scene.hn_props.root_snap_mode:
+            root_co.append(self.root_snap(loop.vert.co, proxy))
         else: 
             guide.append(loop.vert.co)
 
@@ -495,6 +492,10 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         
         return root_co, guide
     
+    #endregion
+    
+    #region helpers
+    
     def separate_mesh(self, context, proxy):
         bpy.ops.object.select_all(action='DESELECT')
         proxy.select_set(True)
@@ -502,7 +503,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         bpy.ops.mesh.separate(type="LOOSE")
         return context.selected_objects
     
-    def snap_root(self, root_co, proxy):
+    def root_snap(self, root_co, proxy):
         '''Sets the root coordinate to the closest point on the hair source'''
         # from here: https://blender.stackexchange.com/questions/58409/how-do-i-find-the-closest-point-on-another-mesh-to-a-vertex-with-python
         
@@ -543,36 +544,38 @@ class HAIRNET_OT_operator (bpy.types.Operator):
     def particle_creation_setup(self, context):
         '''Handles camera, screen, mode, and particle settings for particle creation'''
         # unfortunately whenever you use particle brush edit it becomes impossible (afaik) to reset the camera. I have no idea why, but I'm leaving this camera reset in the code in case this changes in the future (and so that people are aware of the issue)
-        cam_view = context.region_data.view_matrix
-        cam_dist = context.region_data.view_distance
-
-        # Setup camera and object for creating brush edit
-        bpy.context.view_layer.objects.active = data.hair_source
+        cam_view, cam_dist, xray_val = self.set_camera(context)
         self.frame_objects()
         x, y = self.get_center_of_3d_view()
-        bpy.ops.object.mode_set(mode = 'PARTICLE_EDIT')
 
-        # Setup particle brush
-        bpy.ops.wm.tool_set_by_id(name="builtin_brush.Add")
-        bpy.context.scene.tool_settings.particle_edit.brush.count = 1
-        bpy.context.scene.tool_settings.particle_edit.use_emitter_deflect = False
-        bpy.context.scene.tool_settings.particle_edit.use_preserve_root =  False
-        bpy.context.scene.tool_settings.particle_edit.use_preserve_length = False
-
-        xray_val = bpy.context.area.spaces.active.shading.show_xray
-        bpy.context.area.spaces.active.shading.show_xray = False
+        self.setup_particle_brush(context)
 
         return cam_dist, cam_view, x, y, xray_val
     
+    def set_camera(self, context):
+        # brush edit fails in x ray mode
+        xray_val = bpy.context.area.spaces.active.shading.show_xray
+        bpy.context.area.spaces.active.shading.show_xray = False
+
+        return context.region_data.view_matrix, context.region_data.view_distance, xray_val
+    
     def frame_objects(self):
         '''This method ensures the object will be centered in the screen for when the brush edit creates particles'''
+        bpy.context.view_layer.objects.active = data.hair_source
         bpy.ops.object.select_all(action='DESELECT')
         data.hair_source.select_set(True)
         bpy.ops.view3d.view_selected()
     
     def get_center_of_3d_view(self):
-        '''Gets the center of the 3d view area'''
         return bpy.context.area.width / 2, bpy.context.area.height / 2
+    
+    def setup_particle_brush(self, context):
+        bpy.ops.object.mode_set(mode = 'PARTICLE_EDIT')
+        bpy.ops.wm.tool_set_by_id(name="builtin_brush.Add")
+        context.scene.tool_settings.particle_edit.brush.count = 1
+        context.scene.tool_settings.particle_edit.use_emitter_deflect = False
+        context.scene.tool_settings.particle_edit.use_preserve_root =  False
+        context.scene.tool_settings.particle_edit.use_preserve_length = False
 
     def create_particle_hair(self, context):
         '''Creates the new hair using the vertex coordinates from the proxy objects'''
@@ -630,12 +633,10 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         bpy.ops.object.mode_set(mode = 'OBJECT')
         bpy.ops.object.select_all(action='DESELECT')
 
-        bpy.context.area.spaces.active.shading.show_xray = xray_val
+        self.link_proxies_to_collection(context)
+        self.hide_proxy_objects(context)
 
-        if context.scene.hn_props.hide_proxies == True:
-            self.hide_proxy_hair()
-
-        self.camera_reset(context, cam_dist, cam_view)
+        self.camera_reset(context, cam_dist, cam_view, xray_val)
 
     def final_particle_system_cleanup(self, context, x, y):
         '''A FINAL EXTRA PARTICLE MUST BE CREATED TO MAKE THE KEY CHANGES TO THE LAST PARTICLE STICK. I don't know why, and I don't ask questions of the machine gods who rule us'''
@@ -682,13 +683,30 @@ class HAIRNET_OT_operator (bpy.types.Operator):
             if longest_particle < len(ps.particles[i].hair_keys): longest_particle = len(ps.particles[i].hair_keys)
 
         return longest_particle
+    
+    def link_proxies_to_collection(self, context):
+        '''Adds proxies to designated collection. Creates the collection if needed'''
+        if context.scene.hn_props.link_to_collection:
+            if context.scene.hn_props.proxy_collection_name == '':
+                context.scene.hn_props.proxy_collection_name = "Hair_Net_Proxies"
+            collection_name = context.scene.hn_props.proxy_collection_name
+            if bpy.data.collections.get(collection_name) == None:
+                collection = bpy.data.collections.new(name=collection_name)
+            else:
+                collection = bpy.data.collections.get(collection_name)
+            if not context.scene.user_of_id(collection):
+                context.scene.collection.children.link(collection)
+            for proxy in data.proxy_hair_guides:
+                collection.objects.link(proxy)
 
-    def hide_proxy_hair(self):
-        for proxy in data.proxy_hair_guides:
-            proxy.hide_viewport = True    
+    def hide_proxy_objects(self, context):
+        if context.scene.hn_props.hide_proxies:
+            for proxy in data.proxy_hair_guides:
+                proxy.hide_viewport = True
 
-    def camera_reset(self, context, cam_dist, cam_view):
+    def camera_reset(self, context, cam_dist, cam_view, xray_val):
         '''Unfortunately whenever you use particle brush edit it becomes impossible (afaik) to reset the camera. I have no idea why, but I'm leaving this camera reset in the code in case this changes in the future (and so that people are aware of the issue)'''
+        bpy.context.area.spaces.active.shading.show_xray = xray_val
         context.region_data.view_distance = cam_dist
         context.region_data.view_matrix = cam_view
 
