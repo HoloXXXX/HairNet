@@ -216,8 +216,11 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                     continue
 
                 root_vert = self.decide_root(context, mesh_list[i][0], end_verts)
+                root_co = self.handle_root(context, mesh_list[i][0], root_vert)
                 guide = self.fibers_to_vert_co(context, mesh_list[i][0], root_vert)
                 guide = self.co_space_conversion(context, mesh_list[i][0], guide)
+
+                guide = [root_co] + guide
                 self.hair_guides.append(guide)
 
                 proxy_bm.free()
@@ -253,15 +256,17 @@ class HAIRNET_OT_operator (bpy.types.Operator):
 
         return closest_vert
     
+    def handle_root(self, context, proxy, root_vert):
+        if context.scene.hn_props.snap_roots:
+            return self.snap_root(root_vert.co, proxy)
+        
+        return root_vert.co
+        
+    
     def fibers_to_vert_co(self, context, proxy, root_vert):
         '''Adds vert coordinates to guide list in order of edge connections'''
 
         guide = []
-
-        if context.scene.hn_props.snap_roots:                 
-            guide.append(self.snap_root(root_vert.co, proxy))
-        else:
-            guide.append(root_vert.co)
 
         current_vert = root_vert
         current_edge = root_vert.link_edges[0]
@@ -416,16 +421,13 @@ class HAIRNET_OT_operator (bpy.types.Operator):
             if loop.link_loop_prev.link_loop_radial_prev.link_loop_prev.edge.seam == True or loop.link_loop_prev.edge.seam == True:
                 if loop.link_loop_next.edge.seam == True or loop.link_loop_next.link_loop_radial_next.link_loop_next.edge.seam == True:
                     continue
-                guide = self.forward_edge_walk(context, proxy, loop)
+                root_co, guide = self.forward_edge_walk(context, proxy, loop)
             else:
-                guide = self.backward_edge_walk(context, proxy, loop)
-
-            if context.scene.hn_props.snap_roots:
-                guide[0] = self.snap_root(guide[0], proxy)
-
+                root_co, guide = self.backward_edge_walk(context, proxy, loop)
+                
             guide = self.co_space_conversion(context, proxy, guide)
-            self.hair_guides.append(guide)
 
+            self.hair_guides.append(root_co + guide)
 
     def backward_edge_walk(self, context, proxy, loop):
         '''Walks backward along an edge storing vertices until it hits a seam or a new edge'''
@@ -436,8 +438,13 @@ class HAIRNET_OT_operator (bpy.types.Operator):
             vert_comparison == 4
 
         guide = []
+        root_co = []
 
-        guide.append(loop.link_loop_next.vert.co)
+        if context.scene.hn_props.snap_roots:
+            root_co.append(self.snap_root(loop.link_loop_next.vert.co, proxy))
+        else: 
+            guide.append(loop.link_loop_next.vert.co)
+
         guide.append(loop.vert.co)
         
         inf_block = 2
@@ -453,7 +460,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                 self.report({'WARNING'}, ''.join(['Fiber on ', proxy.name, ' Sheetmesh hit max key amount. --- continuing']))
                 break
             
-        return guide
+        return root_co, guide
 
     def forward_edge_walk(self, context, proxy, loop):
         '''Walks forward along an edge storing vertices until it hits a seam or a new edge'''
@@ -464,8 +471,13 @@ class HAIRNET_OT_operator (bpy.types.Operator):
             vert_comparison = 4
         
         guide = []
+        root_co = []
 
-        guide.append(loop.vert.co)
+        if context.scene.hn_props.snap_roots:
+            root_co.append(self.snap_root(loop.vert.co, proxy))
+        else: 
+            guide.append(loop.vert.co)
+
         guide.append(loop.link_loop_next.vert.co)
 
         inf_block = 2
@@ -481,7 +493,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                 self.report({'WARNING'}, ''.join(['Fiber on ', proxy.name, ' Sheetmesh hit max key amount. --- continuing']))
                 break
         
-        return guide
+        return root_co, guide
     
     def separate_mesh(self, context, proxy):
         bpy.ops.object.select_all(action='DESELECT')
@@ -510,13 +522,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         converted_guide = []
         proxy_matrix = proxy.matrix_world
 
-        if context.scene.hn_props.snap_roots:
-            converted_guide.append(guide[0])
-            start_index = 1
-        else:
-            start_index = 0
-
-        for i in range(start_index,len(guide)):
+        for i in range(0,len(guide)):
             world_co = proxy_matrix @ guide[i]
             obj_co = self.hair_source_matrix_inverted @ world_co
             converted_guide.append(obj_co)
