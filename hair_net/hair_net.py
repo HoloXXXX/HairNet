@@ -35,17 +35,17 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         self.hair_source_matrix_inverted = object
         self.fibermesh_list = []
         self.curve_list = []
-        self.sheet_list = []
+        self.sheetmesh_list = []
         self.hair_guides = []
 
         # SETUP
         if self.init_check(): return {'CANCELLED'}
-        no_valid_proxies, beveled_curve_list, other_type_list = self.sort_proxies()
-        if no_valid_proxies: return {'CANCELLED'}
+        invalid_mesh_list, beveled_curve_list, other_type_list = self.sort_proxies()
+        if self.no_valid_proxies(invalid_mesh_list, beveled_curve_list, other_type_list): return {'CANCELLED'}
         if self.set_particle_system(context): return {'CANCELLED'}
         self.set_hair_root_locator(context)
         self.set_hair_source_matrix_inverted()
-        self.initial_user_report(context, beveled_curve_list, other_type_list)
+        self.initial_user_report(context, invalid_mesh_list, beveled_curve_list, other_type_list)
         if context.scene.hn_props.configuration_mode: return {'FINISHED'}
 
         # PROCESSING PROXIES INTO GUIDES
@@ -76,7 +76,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
     def sort_proxies(self):
         '''Sorts the input proxy hair guides. Returns fibermesh, curves, sheet mesh, beveled curves, and "other" type lists'''
         
-        no_valid_proxies = False
+        invalid_mesh_list = []
         beveled_curve_list = []
         other_type_list = []
 
@@ -91,20 +91,34 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                     else:
                         self.curve_list.append(proxy)
                 case "MESH":
-                    if self.fiber_or_sheet(proxy.data):
-                        self.fibermesh_list.append((proxy, proxy.name))
+                    if self.is_valid_mesh(proxy):
+                        continue
                     else:
-                        self.sheet_list.append(proxy)
+                        invalid_mesh_list.append(proxy)
                 case _:
                     other_type_list.append(proxy)
 
-        if len(self.fibermesh_list) + len(self.curve_list) + len(self.sheet_list) == 0:
-            self.report({'ERROR_INVALID_INPUT'}, 'No valid proxy objects selected.')
-            no_valid_proxies = True
-
-        return no_valid_proxies, beveled_curve_list, other_type_list
+        return invalid_mesh_list, beveled_curve_list, other_type_list
                     
-    def fiber_or_sheet(self, mesh):
+    def is_valid_mesh(self, proxy):
+        '''Determines if the mesh is valid by first checking for a face to determine fibermesh status, then checking for a seam if there are faces. Otherwise, it's an invalid mesh.'''
+        if len(proxy.data.polygons) == 0:
+            self.fibermesh_list.append((proxy, proxy.name))
+            return True
+        for edge in proxy.data.edges:
+            if edge.use_seam:
+                self.sheetmesh_list.append(proxy)
+                return True
+        return False
+    
+    def no_valid_proxies(self, invalid_mesh_list, beveled_curve_list, other_type_list):
+        if len(self.fibermesh_list) + len(self.curve_list) + len(self.sheetmesh_list) == 0:
+            self.report_invalid_proxy_warnings(invalid_mesh_list, beveled_curve_list, other_type_list)
+            self.report({'ERROR_INVALID_INPUT'}, 'No valid proxy objects selected.')
+            return True
+        return False
+                    
+    def seam_exists(self, mesh):
         '''Determines if the user intended a mesh object to be a fiber or a sheet by checking if there is a face in the mesh'''
         if len(mesh.polygons) == 0:
             return True        
@@ -156,7 +170,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
     def set_hair_source_matrix_inverted(self):
         self.hair_source_matrix_inverted = data.hair_source.matrix_world.inverted()
     
-    def initial_user_report(self, context, beveled_curve_list, other_type_list):
+    def initial_user_report(self, context, invalid_mesh_list, beveled_curve_list, other_type_list):
         '''Reports to the user in the info box. Names the hair system that will be used, then lists the proxy objects by type, and finally outputs warnings for invalid objects.'''
 
         if context.scene.hn_props.add_to_existing == True:
@@ -179,16 +193,24 @@ class HAIRNET_OT_operator (bpy.types.Operator):
             proxies.append(''.join([' --- ', proxy.name]))        
 
         proxies.append('SHEETS:')
-        for proxy in self.sheet_list:
+        for proxy in self.sheetmesh_list:
             proxies.append(''.join([' --- ', proxy.name]))
 
         self.report({'INFO'}, ''.join(['Building particle hair with "', data.hair_source.name, '" as the hair source and the following as the hair guides:\n', '\n'.join(proxies)]))
+
+        self.report_invalid_proxy_warnings(invalid_mesh_list, beveled_curve_list, other_type_list)
+
+    def report_invalid_proxy_warnings(self, invalid_mesh_list, beveled_curve_list, other_type_list):
+
+        for proxy in invalid_mesh_list:
+            self.report({'WARNING'}, ''.join(['Mesh ', proxy.name, ' has faces but no seams, and is therefore excluded --- continuing']))
 
         for proxy in beveled_curve_list:
             self.report({'WARNING'}, ''.join(['Curve ', proxy.name, ' is beveled and therefore excluded --- continuing']))
 
         for proxy in other_type_list:
             self.report({'WARNING'}, ''.join(['Object ', proxy.name, ' is invalid type ', proxy.type, ' --- continuing']))
+
     
     #endregion
 
@@ -196,12 +218,12 @@ class HAIRNET_OT_operator (bpy.types.Operator):
 
     #region Fibermesh
 
-    def process_fibermesh(self, context, mesh_list):
+    def process_fibermesh(self, context, fibermesh_list):
         '''Turns fibermesh input into vert coordinates for particle hair. mesh_list is a tuple of (proxy object, proxy name)'''
 
-        for i in range(0, len(mesh_list)):
+        for i in range(0, len(fibermesh_list)):
             
-            proxies = self.separate_mesh(context, mesh_list[i][0])
+            proxies = self.separate_mesh(context, fibermesh_list[i][0])
 
             for proxymesh in proxies:
 
@@ -212,12 +234,12 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                 end_verts = self.get_end_verts(proxy_bm)
 
                 if len(end_verts) == 0:
-                    self.report({'WARNING'}, ''.join(['A mesh in ', mesh_list[i][1], ' has no end verts and is therefore excluded --- continuing']))
+                    self.report({'WARNING'}, ''.join(['A mesh in ', fibermesh_list[i][1], ' has no end verts and is therefore excluded --- continuing']))
                     continue
 
-                root_vert = self.decide_root(context, mesh_list[i][0], end_verts)
-                root_co, guide = self.fibers_to_vert_co(context, mesh_list[i][0], root_vert)
-                guide = self.co_space_conversion(context, mesh_list[i][0], guide)
+                root_vert = self.decide_root(context, fibermesh_list[i][0], end_verts)
+                root_co, guide = self.fibers_to_vert_co(context, fibermesh_list[i][0], root_vert)
+                guide = self.co_space_conversion(context, fibermesh_list[i][0], guide)
 
                 self.hair_guides.append(root_co + guide)
 
@@ -368,7 +390,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
     def process_sheets(self, context):
         '''Turns sheet mesh input into vert coordinates for particle hair'''
 
-        for proxy in self.sheet_list:
+        for proxy in self.sheetmesh_list:
 
             proxies = self.separate_mesh(context, proxy)
 
@@ -381,7 +403,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                 bm_loops = self.get_seams(proxy_bm)            
 
                 if len(bm_loops) == 0:
-                        self.report({'WARNING'}, ''.join(['No valid seams found on ', proxy.name, ' and therefore excluded --- continuing']))
+                        self.report({'WARNING'}, ''.join(['No fibers along the seam(s) of sheetmesh ', proxy.name, ' and therefore excluded --- continuing']))
                         continue
 
                 self.fibers_from_sheet_mesh(context, proxy, bm_loops)
@@ -633,7 +655,8 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         bpy.ops.object.mode_set(mode = 'OBJECT')
         bpy.ops.object.select_all(action='DESELECT')
 
-        self.link_proxies_to_collection(context)
+        #proxies = self.fibermesh_list + self.curve_list + self.sheetmesh_list
+        self.link_proxies_to_collection(context, [*[fibermesh[0] for fibermesh in self.fibermesh_list], *self.curve_list, *self.sheetmesh_list])
         self.hide_proxy_objects(context)
 
         self.camera_reset(context, cam_dist, cam_view, xray_val)
@@ -684,20 +707,30 @@ class HAIRNET_OT_operator (bpy.types.Operator):
 
         return longest_particle
     
-    def link_proxies_to_collection(self, context):
-        '''Adds proxies to designated collection. Creates the collection if needed'''
+    def link_proxies_to_collection(self, context, proxies):
+        '''Link proxies to designated collection and unlinks from other collections. Creates the collection if needed'''
         if context.scene.hn_props.link_to_collection:
+            hair_net_collection = self.set_hair_net_collection(context)
+            for proxy in proxies:
+                for obj_collection in proxy.users_collection:
+                    obj_collection.objects.unlink(proxy)
+                hair_net_collection.objects.link(proxy)
+
+    def set_hair_net_collection(self, context):
+            '''Retrieves the appropriate name, creates (if needed), and links to the scene (if needed) a hair net collection.'''
+
             if context.scene.hn_props.proxy_collection_name == '':
-                context.scene.hn_props.proxy_collection_name = "Hair_Net_Proxies"
-            collection_name = context.scene.hn_props.proxy_collection_name
+                context.scene.hn_props.proxy_collection_name = "Hair_Net_Proxies"       
+            collection_name =  context.scene.hn_props.proxy_collection_name     
+
             if bpy.data.collections.get(collection_name) == None:
-                collection = bpy.data.collections.new(name=collection_name)
+                hair_net_collection = bpy.data.collections.new(name=collection_name)
             else:
-                collection = bpy.data.collections.get(collection_name)
-            if not context.scene.user_of_id(collection):
-                context.scene.collection.children.link(collection)
-            for proxy in data.proxy_hair_guides:
-                collection.objects.link(proxy)
+                hair_net_collection = bpy.data.collections.get(collection_name)
+
+            if not context.scene.user_of_id(hair_net_collection):
+                context.scene.collection.children.link(hair_net_collection)
+            return hair_net_collection
 
     def hide_proxy_objects(self, context):
         if context.scene.hn_props.hide_proxies:

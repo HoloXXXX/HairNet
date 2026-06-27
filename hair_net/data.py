@@ -63,10 +63,10 @@ class HairNetProperties(PropertyGroup):
     
     curve_resolution: IntProperty(
         name='Curve Resolution',
-        description='This is number is 1 less than the number of hair keys the tool will set the particle as. If it\'s set to 0, the resolution on each individual curve will be used. Does not affect "Curves" objects.',
+        description='This is number is the the number of hair keys HairNet will create for each control point on the curve. If it\'s set to 0, the resolution on each individual curve will be used. Does not affect "Curves" objects.',
         default=0,
         min=0,
-        max=64,
+        max=1024,
         options = set())
     
     max_keys: IntProperty(
