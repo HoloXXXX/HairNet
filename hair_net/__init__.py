@@ -20,7 +20,7 @@
 
 bl_info = {
         'name':'Hair Net',
-        'author': 'Holo, Rhett Jackson',
+        'author': 'Holo',
         'version': (1,0,0), # Update data.py version string when updating version #
         'blender': (5,0,0),
         'location': '3dView',
@@ -46,7 +46,6 @@ def register():
     data.register()
     hair_net.register()
     ui.register()
-
 
 def unregister():
     data.unregister()

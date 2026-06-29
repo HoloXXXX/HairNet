@@ -1,18 +1,7 @@
-
+/blender_files
 .project
 .pydevproject
-Blend Files/HairNet 2.8 Debug.blend
-*.blend
-*.blend1
-src/__pycache__/HairNet.cpython-37.pyc
-src/Run.py
-src/simp.py
 *.pyc
-.settings/org.eclipse.ltk.core.refactoring.prefs
-Release/
-prev/__init__.py
-prev/hairNet.py
-prev/import_properties.py
-hairNet/Run.py
-hairNet/simp.py
-hairNet/hairNet.zip
+*.mp4
+*.xcf
+./hair_net/__pycache__/
