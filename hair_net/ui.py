@@ -23,8 +23,8 @@ class HAIRNET_PT_view_panel(bpy.types.Panel):
         layout = self.layout 
         
         # VERSION / INFO
-        vbox = layout.box()
-        row = vbox.row()
+        box = layout.box()
+        row = box.row()
         row.label(text= data.version, icon='PARTICLE_PATH')
         row.operator('hairnet_readme.operator', icon='QUESTION', text='')
 
@@ -33,18 +33,30 @@ class HAIRNET_PT_view_panel(bpy.types.Panel):
         row.scale_y = 2.0
         row.operator('hairnet.operator', text='Convert to Hair Particles')
 
-        # ADD TO EXISTING HAIR SYSTEM
+        # PARTICLE SETTINGS
         box = layout.box()
         row = box.row()
-        row.prop(data.scene.hn_props, 'add_to_existing')
+        row.label(text='Particle System Settings:')
+        row = box.row()
+        row.prop(data.scene.hn_props, 'ps_settings', expand=True)
 
-        # HAIR PARTICLE SYSTEM   
-        if data.scene.hn_props.add_to_existing == False:
+        if data.scene.hn_props.ps_settings in ('LINK', 'COPY'):
             row = box.row()
-            row.label(text='Particle Settings:')
-            sub = row.row()
-            sub.scale_x = 1.475
-            sub.prop_search(data.scene.hn_props, 'particle_settings',  bpy.data, 'particles', text='')
+            row.prop_search(data.scene.hn_props, 'ps',  bpy.data, 'particles', text='')
+
+        if data.scene.hn_props.ps_settings in ('NEW', 'COPY'):
+            row = box.row()
+            row.prop(data.scene.hn_props, 'ps_name', text='Name', placeholder='MyParticleSettings')
+        
+        # LINK TO COLLECTION
+        box = layout.box()
+        row = box.row()
+        row.prop(data.scene.hn_props, 'link_to_collection')
+
+        # PROXY COLLECTION NAME
+        if data.scene.hn_props.link_to_collection:
+            row = box.row()
+            row.prop_search(data.scene.hn_props, 'proxy_collection_name', bpy.data, 'collections', text='', results_are_suggestions=True)
 
 class HAIRNET_PT_advanced_panel(bpy.types.Panel):
     bl_label = 'Advanced Features'
@@ -65,15 +77,8 @@ class HAIRNET_PT_advanced_panel(bpy.types.Panel):
         col = split.column()
         col.label(text='General Settings:')
 
-        # LINK TO COLLECTION
-        col = split.column()
-        col.prop(data.scene.hn_props, 'link_to_collection')
-
-        # PROXY COLLECTION NAME
-        if data.scene.hn_props.link_to_collection:
-            col.prop_search(data.scene.hn_props, 'proxy_collection_name', bpy.data, 'collections', text='', results_are_suggestions=True)
-
         # CONFIG MODE
+        col = split.column()
         col.prop(data.scene.hn_props, 'configuration_mode')
 
         # HIDE PROXIES

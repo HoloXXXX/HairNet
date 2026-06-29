@@ -82,15 +82,15 @@ class HAIRNET_OT_operator (bpy.types.Operator):
 
         for proxy in data.proxy_hair_guides:
             match proxy.type:
-                case "CURVES":
+                case 'CURVES':
                         self.curve_list.append(proxy)    
-                case "CURVE":
+                case 'CURVE':
                     if proxy.data.bevel_depth > 0.0 or\
                         proxy.data.bevel_object != None:
                         beveled_curve_list.append(proxy)
                     else:
                         self.curve_list.append(proxy)
-                case "MESH":
+                case 'MESH':
                     if self.is_valid_mesh(proxy):
                         continue
                     else:
@@ -123,34 +123,75 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         if len(mesh.polygons) == 0:
             return True        
         return False
+    
+    #region Particle Settings
 
     def set_particle_system(self,context):
-        '''Handles all of the logic for which particle system should be used'''
+        '''Handles all of the logic for which particle system and which settings should be used'''
 
-        if context.scene.hn_props.add_to_existing:
-            if data.hair_source.particle_systems.active == None:
-                self.report({'ERROR_INVALID_INPUT'}, 'You need to have an active particle system on the object to add to an existing hair system.')
+        match context.scene.hn_props.ps_settings:
+            case 'ACTIVE':
+                if data.hair_source.particle_systems.active == None:
+                    self.report({'ERROR_INVALID_INPUT'}, 'You need to have an active particle system on the object to add to an existing hair system.')
+                    return True
+                return self.handle_emitter_system(data.hair_source.particle_systems.active.settings, 'The active particle system must be a hair system.')
+            case "NEW":
+                self.create_new_particle_settings(context, context.scene.hn_props.ps_name)
+                return False
+            case "LINK":
+                return self.link_particle_system_settings(context)
+            case "COPY":
+                return self.copy_particle_system_settings(context)
+            case _:
+                self.report({'ERROR_INVALID_INPUT'}, 'What in the...? How\'d you even do this?.')
                 return True
-        else:
-            bpy.ops.object.particle_system_add()
-            self.set_particle_system_settings(context)
+    
+    def create_new_particle_settings(self, context, ps_name):
+        '''Creates a completely new particle system'''
+        bpy.ops.object.particle_system_add()
+        data.hair_source.particle_systems.active.settings.name = self.get_particle_settings_name(context)
+        data.hair_source.particle_systems.active.settings.type = 'HAIR'
+        data.hair_source.particle_systems.active.settings.count = 0
 
-        if data.hair_source.particle_systems.active.settings.type == 'EMITTER':
-            self.report({'ERROR_INVALID_INPUT'}, 'The active particle system must be a hair system.')
-            return True
-        
+    def link_particle_system_settings(self, context):
+        '''Links particle settings to a new particle system.'''
+        if self.handle_particle_settings_empty(context, 'linked'): return True
+        if self.handle_emitter_system(bpy.data.particles[context.scene.hn_props.ps], 'The linked particle settings must be a hair system.'): return True
+        self.create_duplicate_particle_system(bpy.data.particles[context.scene.hn_props.ps])
         return False
 
-    def set_particle_system_settings(self, context):
-        '''Sets the particle settings for a new particle system'''
-
-        if context.scene.hn_props.particle_settings == '':
-            data.hair_source.particle_systems.active.settings.type = 'HAIR'
-            data.hair_source.particle_systems.active.settings.count = 0
-            return
-
-        data.hair_source.particle_systems.active.settings = bpy.data.particles[context.scene.hn_props.particle_settings]
+    def copy_particle_system_settings(self, context):
+        '''Links particle settings to a new particle system.'''
+        if self.handle_particle_settings_empty(context, 'copied'): return True
+        if self.handle_emitter_system(bpy.data.particles[context.scene.hn_props.ps], 'The copied particle settings must be a hair system.'): return True
+        ps = bpy.data.particles[context.scene.hn_props.ps].copy()
+        ps.name = self.get_particle_settings_name(context)
+        self.create_duplicate_particle_system(ps)
+        return False
+    
+    def create_duplicate_particle_system(self, ps_settings):
+        bpy.ops.object.particle_system_add()
+        data.hair_source.particle_systems.active.settings = ps_settings
         data.hair_source.particle_systems.active.settings.count = 0
+
+    def get_particle_settings_name(self, context):
+        return data.ps_name_default if context.scene.hn_props.ps_name == '' else context.scene.hn_props.ps_name
+
+    def handle_particle_settings_empty(self, context, ps_type_handler):
+        '''Handles error for an empty particle settings field'''
+        if context.scene.hn_props.ps == '':
+            self.report({'ERROR_INVALID_INPUT'}, "".join(['Particle settings field must not be empty Please choose particle settings to be ', ps_type_handler, '.']))
+            return True
+        return False
+
+    def handle_emitter_system(self, ps, report):
+        '''Handles error for an emitter particle system'''
+        if ps.type == 'EMITTER':
+            self.report({'ERROR_INVALID_INPUT'}, report)
+            return True
+        return False
+    
+    #endregion
     
     def set_hair_root_locator(self, context):
         '''Sets what object will be used when determing which vert of a fiber or curve to set as the root.'''
@@ -173,12 +214,11 @@ class HAIRNET_OT_operator (bpy.types.Operator):
     def initial_user_report(self, context, invalid_mesh_list, beveled_curve_list, other_type_list):
         '''Reports to the user in the info box. Names the hair system that will be used, then lists the proxy objects by type, and finally outputs warnings for invalid objects.'''
 
-        if context.scene.hn_props.add_to_existing == True:
+        if context.scene.hn_props.ps_settings == 'ACTIVE':
             ps_report = ''.join(['Using existing particle system ', data.hair_source.particle_systems.active.name])
         else:
-            ps_report = ''.join(['Using ', context.scene.hn_props.particle_settings, ' as the particle settings.'])
-            if context.scene.hn_props.particle_settings == '':
-                ps_report = 'Using new particle settings.'
+            pss_type = 'new' if context.scene.hn_props.ps_settings == 'NEW' else 'linked' if context.scene.hn_props.ps_settings == 'LINK' else 'copied'
+            ps_report = ''.join(['Using a new particle system with ', pss_type, ' particle settings: ', data.hair_source.particle_systems.active.settings.name])
 
         self.report({'INFO'}, ps_report)
         
@@ -199,7 +239,6 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         self.report({'INFO'}, ''.join(['Building particle hair with "', data.hair_source.name, '" as the hair source and the following as the hair guides:\n', '\n'.join(proxies)]))
 
         self.report_invalid_proxy_warnings(invalid_mesh_list, beveled_curve_list, other_type_list)
-
     def report_invalid_proxy_warnings(self, invalid_mesh_list, beveled_curve_list, other_type_list):
 
         for proxy in invalid_mesh_list:
@@ -364,10 +403,12 @@ class HAIRNET_OT_operator (bpy.types.Operator):
         if self.curve_list[i].data.splines[0].type == "BEZIER":
             for point in self.curve_list[i].data.splines[0].bezier_points:
                 if point.select_control_point:
+                    print('bezier')
                     selected_coords.append(point.co)
         else:
             for point in self.curve_list[i].data.splines[0].points:
                 if point.select:
+                    print('not bezier')
                     selected_coords.append(point.co)
         
         return selected_coords
@@ -380,7 +421,9 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                 vert.select = True
 
     def same_vert_location(self, vert1_co, vert2_co, rel_tol=1e-09, abs_tol=0.001):
-        if abs(vert2_co - vert1_co) < max(rel_tol * max(abs(vert1_co), abs(vert2_co), abs_tol)):
+        if abs(vert1_co.x - vert2_co.x) < max(rel_tol * max(abs(vert1_co.x), abs(vert2_co.x)), abs_tol) and \
+            (vert1_co.y - vert2_co.y) < max(rel_tol * max(abs(vert1_co.y), abs(vert2_co.y)), abs_tol) and \
+            (vert1_co.z - vert2_co.z) < max(rel_tol * max(abs(vert1_co.z), abs(vert2_co.z)), abs_tol):
             return True
                 
     #endregion
@@ -403,7 +446,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
                 bm_loops = self.get_seams(proxy_bm)            
 
                 if len(bm_loops) == 0:
-                        self.report({'WARNING'}, ''.join(['No fibers along the seam(s) of sheetmesh ', proxy.name, ' and therefore excluded --- continuing']))
+                        self.report({'WARNING'}, ''.join(['No valid fibers along the seam(s) of sheetmesh ', proxy.name, ' and therefore excluded --- continuing']))
                         continue
 
                 self.fibers_from_sheet_mesh(context, proxy, bm_loops)
@@ -476,7 +519,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
 
             inf_block +=1
             if inf_block == context.scene.hn_props.max_keys:
-                self.report({'WARNING'}, ''.join(['Fiber on ', proxy.name, ' Sheetmesh hit max key amount. --- continuing']))
+                self.report({'WARNING'}, ''.join(['Fiber on ', proxy.name, ' sheetmesh hit max key amount. --- continuing']))
                 break
             
         return root_co, guide
@@ -509,7 +552,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
             
             inf_block +=1
             if inf_block == context.scene.hn_props.max_keys:
-                self.report({'WARNING'}, ''.join(['Fiber on ', proxy.name, ' Sheetmesh hit max key amount. --- continuing']))
+                self.report({'WARNING'}, ''.join(['Fiber on ', proxy.name, ' sheetmesh hit max key amount. --- continuing']))
                 break
         
         return root_co, guide
@@ -735,7 +778,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
     def hide_proxy_objects(self, context):
         if context.scene.hn_props.hide_proxies:
             for proxy in data.proxy_hair_guides:
-                proxy.hide_viewport = True
+                proxy.hide_set(True)
 
     def camera_reset(self, context, cam_dist, cam_view, xray_val):
         '''Unfortunately whenever you use particle brush edit it becomes impossible (afaik) to reset the camera. I have no idea why, but I'm leaving this camera reset in the code in case this changes in the future (and so that people are aware of the issue)'''

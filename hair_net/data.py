@@ -12,13 +12,29 @@ from bpy.props import (StringProperty,
                        CollectionProperty,
                        )
 
-# update the bl_info in __init__ and blender_manifest.toml when changing this
-version = "1.0.0"
+version = "1.0.0" # update the bl_info in __init__ and blender_manifest.toml when changing this
+ps_name_default = "HairNetSettings"
 
 class HairNetProperties(PropertyGroup):
-    particle_settings: StringProperty(
+
+    ps_settings: EnumProperty(
+        items=[
+                ('ACTIVE', 'Active', 'Add the guide hairs to the active particle system. Requires an existing particle system to be active.'),
+                ('NEW', 'New', 'Creates a new particle system with new particle settings.'),
+                ('LINK', 'Link', 'Creates a new particle system with settings linked to existing particle settings. Any changes made to these settings will also change all other particle systems with the same settings.'),
+                ('COPY', 'Copy', 'Creates a new particle system with copied particle settings. Changes to these settings will not affect current particle systems.'),
+        ],
+        default='ACTIVE',
+    )
+    
+    ps: StringProperty(
         name='Particle Settings',
-        description='Particle settings to be copied to the new particle system. If you want to generate new settings, leave this blank.',
+        description='Particle settings to be copied to the new particle system. If you want to generate new settings, leave this blank',
+        default='')
+    
+    ps_name: StringProperty(
+        name='Particle Settings Name',
+        description=(''.join(['The name for the generated particle settings. If the name already exists it will be appended. It will default to "', ps_name_default, '" if left blank.'])),
         default='')
     
     proxy_collection_name: StringProperty(
@@ -30,11 +46,6 @@ class HairNetProperties(PropertyGroup):
         name='Root Locator',
         description='Select an object to use as an indicator for which side of the hair should be the root. This is the location of the transform in the viewport when "bounding box center" is selected as the objects transform pivot point. This is overridden by root select mode when it applies.',
         default='')
-    
-    add_to_existing: BoolProperty(
-        name='Add To Existing Hair System',
-        description='Add the guide hairs to the active particle system. Requires an existing particle system to be active.',
-        default=False)
     
     link_to_collection: BoolProperty(
         name='Link Proxies To Collection',
@@ -63,7 +74,7 @@ class HairNetProperties(PropertyGroup):
     
     curve_resolution: IntProperty(
         name='Curve Resolution',
-        description='This is number is the the number of hair keys HairNet will create for each control point on the curve. If it\'s set to 0, the resolution on each individual curve will be used. Does not affect "Curves" objects.',
+        description='This is number is the the number of hair keys HairNet will create for each control point on the curve. If it\'s set to 0, the resolution on each individual curve will be used. Does not affect "Curves" objects. See "Curve Resolution" and ""Curve" vs "Curves"" in the README for more information',
         default=0,
         min=0,
         max=1024,
