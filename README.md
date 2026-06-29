@@ -97,7 +97,9 @@ HairNet provides a number of feature improvements:
 <a id="general-usage"></a>
 # General Usage Info
 
-Prefer video guides? Check out: https://youtu.be/GiBysHkJ-G8
+Prefer video guides? Check out: 
+
+[![](https://img.youtube.com/vi/GiBysHkJ-G8/maxresdefault.jpg)](https://youtu.be/vx5dSS3BBOk)
 
 <a id="the-active-object"></a>
 ## The Active Object
