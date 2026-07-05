@@ -12,10 +12,8 @@ blender_version_min = "5.0.0"
 # for earlier versions: https://github.com/Jandals/HairNet
 
 # Updated docs: 
+website = "https://github.com/HoloXXXX/HairNet/blob/master/README.md"
 
-website = "https://github.com/HoloXXXX/HairNet"
-
-# https://docs.blender.org/manual/en/dev/advanced/extensions/licenses.html
 license = [
   "SPDX:GPL-3.0-or-later",
 ]

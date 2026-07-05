@@ -16,18 +16,6 @@
 #
 # ##### END GPL LICENSE BLOCK #####
 
-#TODO: UPDATE LINK TO DOCS IN MANIFEST (and create them)
-
-bl_info = {
-        'name':'Hair Net',
-        'author': 'Holo',
-        'version': (1,0,0), # Update data.py version string when updating version #
-        'blender': (5,0,0),
-        'location': '3dView',
-        'category': 'Particle',
-        'description': 'Converts mesh and curves into hair guides for the particle hair system',
-        }
-
 if 'bpy' in locals():
     import importlib
     importlib.reload(data)
