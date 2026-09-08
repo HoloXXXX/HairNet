@@ -299,11 +299,13 @@ You can also use the "Connect Hair" feature of particle hair, but this causes th
 
 Root select mode is a way of absolutely ensuring the correct end of the proxy mesh is determined as the root. It works by selecting the mesh vertices or "Curve" control points on each proxy and letting HairNet handle the rest.
 
-**It is recommended that you first try using [Root Locator](#root-locator) to determine the roots as it's far less time consuming.**
+**It is recommended that you first try using [Root Locator](#root-locator) to determine the roots as it's less time consuming and has fewer edge cases.**
 
 ![Example of root snapping combined with root select](./images/21_RootSelect.GIF)
 
 (A reminder, you should only be trying to set end verts and end control points as the root.)
+
+Root select mode will also fail to work depending on the number of splines per curve and the number of islands per mesh. In my personal testing I have found this number is somewhere between 100-150 but results may vary.
 
 If objects don't have valid selections and root select mode is enabled, it will fall back to another behavior. The order of priority for establishing the root in HairNet is **Root Select Mode > Root Locator > Hair Source Center Point**
 
@@ -414,8 +416,6 @@ It may just be the children of your particles that look strange. Try setting chi
 
 If this is the case in your situation, see [Root Snap Mode](#root-snap)
 
-
-
 <a id=could-not-create-particle></a>
 ## "Could not create particle"
 
@@ -440,6 +440,16 @@ See [Configuration Mode](#configuration-mode) for more information about Blender
 It's likely that your mesh consists of multiple islands of geometry. You can confirm this by going into Edit Mode, selecting a vert, and **Select > Select Linked > Linked**
 
 The parts of your geometry that are selected are the parts connected to that initial vertex. See [Merge By Distance](#merge-by-distance) for more on solving this.
+
+## "Root Select Mode doesn't work"
+
+In cases of greater than approximately 100 islands per mesh or splines per curve root select mode will fail. In this case HairNet will first fall back to [Root Locator](#root-locator), and then to default behavior.
+
+As a work around, it is generally recommended to first use Root Locator as a starting point. If you find yourself absolutely requiring Root Select Mode you can first separate the mesh/curve object into objects with fewer than 100 islands/splines, and then use HairNet as normal.
+
+Resolving this issue would require HairNet to take more compute time for less precise results, so I have opted not to include it in lieu of Root Locator already being a better alternative for almost all use cases.
+
+See [Root Select Mode](#root-select-mode) for more details.
 
 ## "Why doesn't my particle extend through my whole Fibermesh?"
 

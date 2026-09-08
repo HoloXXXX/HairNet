@@ -1,9 +1,9 @@
-schema_version = "1.0.0"
+schema_version = "1.0."
 
 id = "hair_net"
-version = "1.0.0"
+version = "1.0.1"
 name = "Hair Net"
-tagline = "Converts mesh and curves into hair guides for the particle hair system"
+tagline = "Converts mesh and curves into particle hair"
 maintainer = "Holo"
 type = "add-on"
 tags = ["Physics", "Pipeline"]

@@ -12,7 +12,7 @@ from bpy.props import (StringProperty,
                        CollectionProperty,
                        )
 
-version = "1.0.0" # update the bl_info in __init__ and blender_manifest.toml when changing this
+version = "1.0.1" # update the bl_info in __init__ and blender_manifest.toml when changing this
 ps_name_default = "HairNetSettings"
 
 class HairNetProperties(PropertyGroup):

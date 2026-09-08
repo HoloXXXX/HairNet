@@ -156,6 +156,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
     def link_particle_system_settings(self, context):
         '''Links particle settings to a new particle system.'''
         if self.handle_particle_settings_empty(context, 'linked'): return True
+        if self.handle_particle_settings_invalid(context): return True
         if self.handle_emitter_system(bpy.data.particles[context.scene.hn_props.ps], 'The linked particle settings must be a hair system.'): return True
         self.create_duplicate_particle_system(bpy.data.particles[context.scene.hn_props.ps])
         return False
@@ -163,6 +164,7 @@ class HAIRNET_OT_operator (bpy.types.Operator):
     def copy_particle_system_settings(self, context):
         '''Links particle settings to a new particle system.'''
         if self.handle_particle_settings_empty(context, 'copied'): return True
+        if self.handle_particle_settings_invalid(context): return True
         if self.handle_emitter_system(bpy.data.particles[context.scene.hn_props.ps], 'The copied particle settings must be a hair system.'): return True
         ps = bpy.data.particles[context.scene.hn_props.ps].copy()
         ps.name = self.get_particle_settings_name(context)
@@ -183,6 +185,14 @@ class HAIRNET_OT_operator (bpy.types.Operator):
             self.report({'ERROR_INVALID_INPUT'}, "".join(['Particle settings field must not be empty Please choose particle settings to be ', ps_type_handler, '.']))
             return True
         return False
+
+    def handle_particle_settings_invalid(self, context):
+        '''Handles error for an empty particle settings field'''
+        if any(context.scene.hn_props.ps == ps.name for ps in bpy.data.particles):
+            return False
+        else:
+            self.report({'ERROR_INVALID_INPUT'}, 'Particle settings field is invalid. Please select valid particle settings object.')
+            return True
 
     def handle_emitter_system(self, ps, report):
         '''Handles error for an emitter particle system'''
